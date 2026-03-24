@@ -1,0 +1,665 @@
+// GhostSync Database Schema
+// Modern scheduling application with plugin architecture
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ===========================================
+// Enums
+// ===========================================
+
+enum Role {
+  ADMIN
+  MANAGER
+  SCHEDULER
+  REQUESTER
+  MEMBER
+  UNASSIGNED
+}
+
+enum AssignmentStatus {
+  SCHEDULED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum RequestStatus {
+  UNSCHEDULED
+  SCHEDULED
+  FORECAST
+}
+
+// ===========================================
+// Core Entities
+// ===========================================
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String?  // null for SSO-only users
+  firstName    String
+  lastName     String
+  avatar       String?
+  role         Role     @default(MEMBER)
+  isActive          Boolean  @default(true)
+  mustResetPassword Boolean  @default(false)
+  ssoProvider       String?  // 'oidc' | 'saml' | null
+  ssoSubject   String?  // External SSO ID
+  preferences  Json     @default("{}")
+
+  lastLogin          DateTime?
+  lastPasswordChange DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  assignments         Assignment[]               @relation("CreatedBy")
+  auditLogs           AuditLog[]
+  notifications       Notification[]
+  sessions            Session[]
+  requests            Request[]
+  integrationSettings UserIntegrationSetting[]
+  userPlugins         UserPlugin[]
+
+  @@index([email])
+  @@index([role])
+  @@index([isActive])
+}
+
+model Member {
+  id            String  @id @default(cuid())
+  employeeId    String? @unique
+  firstName     String
+  lastName      String
+  email         String?
+  phone         String?
+  department    String?
+  position      String?
+  managerId     String?
+  resume        String? @db.Text
+  certification String? @db.Text
+  training      String? @db.Text
+  education     String? @db.Text
+  notes         String? @db.Text
+  isActive      Boolean @default(true)
+  workingHours  Json?   // { mon: {start: "09:00", end: "17:00"}, tue: ... }
+  metadata      Json    @default("{}")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  manager        Member?               @relation("MemberManager", fields: [managerId], references: [id])
+  directReports  Member[]              @relation("MemberManager")
+  assignments    AssignmentMember[]
+  unavailability MemberUnavailability[]
+  skills         MemberSkill[]
+  requests       RequestMember[]
+  projectRoles   MemberProjectRole[]
+
+  @@index([isActive])
+  @@index([department])
+  @@index([managerId])
+}
+
+model Assignment {
+  id            String           @id @default(cuid())
+  title         String
+  description   String?
+  startDate     DateTime
+  endDate       DateTime
+  projectTypeId String
+  status        AssignmentStatus @default(SCHEDULED)
+  metadata      Json             @default("{}")
+  requestId     String?
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  createdById String
+
+  // Relations
+  projectType    ProjectType             @relation(fields: [projectTypeId], references: [id])
+  createdBy      User                    @relation("CreatedBy", fields: [createdById], references: [id])
+  request        Request?                @relation(fields: [requestId], references: [id])
+  members        AssignmentMember[]
+  requiredSkills AssignmentSkill[]
+  formatters     AssignmentFormatter[]
+  projectRoles   AssignmentProjectRole[]
+
+  @@index([startDate, endDate])
+  @@index([status])
+  @@index([projectTypeId])
+  @@index([createdById])
+  @@index([requestId])
+}
+
+model AssignmentMember {
+  id           String @id @default(cuid())
+  assignmentId String
+  memberId     String
+
+  // Relations
+  assignment Assignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  member     Member     @relation(fields: [memberId], references: [id])
+
+  @@unique([assignmentId, memberId])
+  @@index([memberId])
+}
+
+model AssignmentFormatter {
+  id           String @id @default(cuid())
+  assignmentId String
+  formatterId  String
+
+  // Relations
+  assignment Assignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  formatter  Formatter  @relation(fields: [formatterId], references: [id], onDelete: Cascade)
+
+  @@unique([assignmentId, formatterId])
+  @@index([formatterId])
+}
+
+model AssignmentProjectRole {
+  id            String @id @default(cuid())
+  assignmentId  String
+  projectRoleId String
+
+  // Relations
+  assignment  Assignment  @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  projectRole ProjectRole @relation(fields: [projectRoleId], references: [id], onDelete: Cascade)
+
+  @@unique([assignmentId, projectRoleId])
+  @@index([projectRoleId])
+}
+
+// ===========================================
+// Configuration Entities
+// ===========================================
+
+model ProjectType {
+  id          String  @id @default(cuid())
+  name         String  @unique
+  abbreviation String? @db.VarChar(10)
+  color        String  @default("#3B82F6")
+  description String?
+  isActive    Boolean @default(true)
+  fieldConfig Json?   // Visibility and required settings for request form fields
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  assignments Assignment[]
+  requests    Request[]
+
+  @@index([isActive])
+}
+
+model Formatter {
+  id       String  @id @default(cuid())
+  name     String  @unique
+  isBold   Boolean @default(false)
+  prefix   String? @db.VarChar(50)
+  suffix   String? @db.VarChar(50)
+  isActive Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  assignments  AssignmentFormatter[]
+  projectRoles ProjectRoleFormatter[]
+
+  @@index([isActive])
+}
+
+model Skill {
+  id          String  @id @default(cuid())
+  name        String  @unique
+  category    String?
+  description String?
+  isActive    Boolean @default(true)
+  externalId  String? // For API sync (plugin extension)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  members     MemberSkill[]
+  assignments AssignmentSkill[]
+  requests    RequestSkill[]
+
+  @@index([category])
+  @@index([isActive])
+  @@index([externalId])
+}
+
+model ProjectRole {
+  id          String  @id @default(cuid())
+  name        String  @unique
+  description String?
+  color       String? @default("#6B7280")
+  isActive    Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  formatters  ProjectRoleFormatter[]
+  assignments AssignmentProjectRole[]
+  members     MemberProjectRole[]
+
+  @@index([isActive])
+}
+
+model ProjectRoleFormatter {
+  id            String @id @default(cuid())
+  projectRoleId String
+  formatterId   String
+
+  // Relations
+  projectRole ProjectRole @relation(fields: [projectRoleId], references: [id], onDelete: Cascade)
+  formatter   Formatter   @relation(fields: [formatterId], references: [id], onDelete: Cascade)
+
+  @@unique([projectRoleId, formatterId])
+  @@index([formatterId])
+}
+
+model MemberSkill {
+  id       String @id @default(cuid())
+  memberId String
+  skillId  String
+  level    Int    @default(1) // 1-5 proficiency
+
+  // Relations
+  member Member @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  skill  Skill  @relation(fields: [skillId], references: [id], onDelete: Cascade)
+
+  @@unique([memberId, skillId])
+  @@index([skillId])
+}
+
+model MemberProjectRole {
+  id            String    @id @default(cuid())
+  memberId      String
+  projectRoleId String
+  dateAwarded   DateTime?
+
+  createdAt DateTime @default(now())
+
+  // Relations
+  member      Member      @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  projectRole ProjectRole @relation(fields: [projectRoleId], references: [id], onDelete: Cascade)
+
+  @@unique([memberId, projectRoleId])
+  @@index([projectRoleId])
+}
+
+model AssignmentSkill {
+  id           String  @id @default(cuid())
+  assignmentId String
+  skillId      String
+  required     Boolean @default(true)
+
+  // Relations
+  assignment Assignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  skill      Skill      @relation(fields: [skillId], references: [id], onDelete: Cascade)
+
+  @@unique([assignmentId, skillId])
+  @@index([skillId])
+}
+
+model MemberUnavailability {
+  id        String   @id @default(cuid())
+  memberId  String
+  startDate DateTime
+  endDate   DateTime
+  reason    String?
+
+  // Relations
+  member Member @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@index([memberId])
+  @@index([startDate, endDate])
+}
+
+// ===========================================
+// Audit & Notifications
+// ===========================================
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  action    String   // CREATE, UPDATE, DELETE, LOGIN, LOGOUT, etc.
+  entity    String   // User, Member, Assignment, etc.
+  entityId  String?
+  oldValue  Json?
+  newValue  Json?
+  ipAddress String?
+  userAgent String?
+  metadata  Json     @default("{}")
+
+  createdAt DateTime @default(now())
+
+  // Relations
+  user User? @relation(fields: [userId], references: [id])
+
+  @@index([entity, entityId])
+  @@index([userId])
+  @@index([action])
+  @@index([createdAt])
+}
+
+model Notification {
+  id      String  @id @default(cuid())
+  userId  String
+  type    String  // ASSIGNMENT, SYSTEM, ALERT, etc.
+  title   String
+  message String
+  data    Json    @default("{}")
+  isRead  Boolean @default(false)
+
+  createdAt DateTime @default(now())
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([isRead])
+  @@index([createdAt])
+}
+
+model Request {
+  id          String        @id @default(cuid())
+  title       String        @db.VarChar(200)
+  description String?       @db.Text
+  status      RequestStatus @default(UNSCHEDULED)
+  requesterId String
+
+  // Project details
+  requestedStartDate DateTime?
+  requestedEndDate   DateTime?
+  projectId          String?   @db.VarChar(100)
+  kantataId          String?   @db.VarChar(100)
+  clientName         String?   @db.VarChar(200)
+  projectName        String?   @db.VarChar(200)
+  projectTypeId      String?
+
+  // Timeline
+  executionWeeks   Int @default(0)
+  preparationWeeks Int @default(0)
+  reportingWeeks   Int @default(0)
+
+  // Resource requirements
+  requiredMemberCount Int @default(0)
+
+  // Additional details
+  travelRequired Boolean @default(false)
+  travelLocation String? @db.VarChar(200)
+  timezone       String? @db.VarChar(100)
+  urlLink        String? @db.VarChar(500)
+  studentCount   Int     @default(0)
+  format         String? @db.VarChar(100)
+  location       String? @db.VarChar(200)
+  notes          String? @db.Text
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  requester       User            @relation(fields: [requesterId], references: [id])
+  projectType     ProjectType?    @relation(fields: [projectTypeId], references: [id])
+  requiredMembers RequestMember[]
+  requiredSkills  RequestSkill[]
+  assignments     Assignment[]
+
+  @@index([requesterId])
+  @@index([status])
+  @@index([createdAt])
+  @@index([projectTypeId])
+}
+
+model RequestMember {
+  id        String @id @default(cuid())
+  requestId String
+  memberId  String
+
+  // Relations
+  request Request @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  member  Member  @relation(fields: [memberId], references: [id])
+
+  @@unique([requestId, memberId])
+  @@index([memberId])
+}
+
+model RequestSkill {
+  id        String @id @default(cuid())
+  requestId String
+  skillId   String
+
+  // Relations
+  request Request @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  skill   Skill   @relation(fields: [skillId], references: [id], onDelete: Cascade)
+
+  @@unique([requestId, skillId])
+  @@index([skillId])
+}
+
+// ===========================================
+// Authentication & Sessions
+// ===========================================
+
+model Session {
+  id           String   @id @default(cuid())
+  userId       String
+  token        String   @unique
+  refreshToken String   @unique
+  expiresAt    DateTime
+  ipAddress    String?
+  userAgent    String?
+
+  createdAt DateTime @default(now())
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+// ===========================================
+// System Configuration
+// ===========================================
+
+model SystemConfig {
+  id       String @id @default(cuid())
+  key      String @unique
+  value    Json
+  category String @default("general")
+
+  updatedAt DateTime @updatedAt
+
+  @@index([category])
+}
+
+// ===========================================
+// Plugin System
+// ===========================================
+
+enum PluginType {
+  INTEGRATION
+  EXTENSION
+}
+
+enum PluginScope {
+  SYSTEM // Enabled globally for all users
+  USER   // Per-user enablement
+}
+
+model Plugin {
+  id          String      @id @default(cuid())
+  name        String      @unique
+  catalogId   String?     // Reference to catalog item ID
+  type        PluginType  @default(INTEGRATION)
+  scope       PluginScope @default(SYSTEM)
+  version     String
+  displayName String?
+  description String?
+  isEnabled   Boolean     @default(false) // For SYSTEM scope plugins only
+  config      Json        @default("{}")
+
+  installedAt DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  userPlugins UserPlugin[]
+
+  @@index([isEnabled])
+  @@index([type])
+  @@index([scope])
+  @@index([catalogId])
+}
+
+// Per-user plugin enablement for USER scope plugins
+model UserPlugin {
+  id        String  @id @default(cuid())
+  userId    String
+  pluginId  String
+  isEnabled Boolean @default(false)
+  config    Json    @default("{}") // User-specific config overrides
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  plugin Plugin @relation(fields: [pluginId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, pluginId])
+  @@index([userId])
+  @@index([pluginId])
+  @@index([isEnabled])
+}
+
+model UserIntegrationSetting {
+  id            String  @id @default(cuid())
+  userId        String
+  integrationId String  // e.g., 'openai-llm'
+  key           String  // e.g., 'apiKey', 'baseUrl', 'model'
+  value         String  // Encrypted value for sensitive data
+  isEncrypted   Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, integrationId, key])
+  @@index([userId])
+  @@index([integrationId])
+}
+
+// ===========================================
+// Data Ingestion System
+// ===========================================
+
+model ExternalIdMapping {
+  id         String   @id @default(cuid())
+  source     String   // Plugin/integration name (e.g., 'kantata-sync', 'json-import')
+  entityType String   // Entity type (e.g., 'Member', 'Skill', 'Assignment')
+  externalId String   // External system ID
+  internalId String   // GhostCast internal ID
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([source, entityType, externalId])
+  @@index([source, entityType])
+  @@index([internalId])
+}
+
+enum IngestionJobStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+model IngestionJob {
+  id           String              @id @default(cuid())
+  source       String              // Plugin/integration name
+  status       IngestionJobStatus  @default(PENDING)
+  triggeredBy  String?             // User ID who triggered the ingestion
+  payload      Json                // Original ingestion payload
+  result       Json?               // IngestionResult when complete
+  progress     Int                 @default(0) // 0-100 percentage
+  errorMessage String?
+
+  createdAt   DateTime  @default(now())
+  startedAt   DateTime?
+  completedAt DateTime?
+
+  @@index([source])
+  @@index([status])
+  @@index([createdAt])
+}
+
+// ===========================================
+// Schedule Backup System
+// ===========================================
+
+enum BackupType {
+  FULL
+  INCREMENTAL
+}
+
+enum BackupStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  FAILED
+}
+
+model ScheduleBackup {
+  id          String       @id @default(cuid())
+  type        BackupType
+  status      BackupStatus @default(PENDING)
+  label       String?      // User-friendly name, e.g. "March 2026 Full"
+  description String?
+
+  // Incremental chain tracking
+  parentBackupId String?
+  parentBackup   ScheduleBackup?  @relation("BackupChain", fields: [parentBackupId], references: [id])
+  childBackups   ScheduleBackup[] @relation("BackupChain")
+
+  // Snapshot metadata
+  snapshotTimestamp DateTime  // Point-in-time this backup represents
+  backupMonth       String    // "YYYY-MM" format for the month this backup covers
+  filePath          String    // Relative path to JSON dump file within backup directory
+  fileSizeBytes     Int       @default(0)
+  recordCounts      Json      // { requests, assignments, assignmentMembers, ... }
+
+  // Who/what triggered it
+  triggeredBy String?  // User ID if manual, null if scheduled
+  isAutomatic Boolean  @default(false)
+
+  errorMessage String?
+
+  createdAt   DateTime  @default(now())
+  completedAt DateTime?
+
+  @@index([type])
+  @@index([status])
+  @@index([createdAt])
+  @@index([backupMonth])
+  @@index([parentBackupId])
+}

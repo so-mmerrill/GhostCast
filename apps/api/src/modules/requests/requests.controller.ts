@@ -1,0 +1,89 @@
+import {
+  Controller,
+  Get,
+  Post,
+  Put,
+  Delete,
+  Body,
+  Param,
+  Query,
+  HttpCode,
+  HttpStatus,
+} from '@nestjs/common';
+import { RequestsService } from './requests.service';
+import { CreateRequestDto } from './dto/create-request.dto';
+import { UpdateRequestDto } from './dto/update-request.dto';
+import { QueryRequestDto } from './dto/query-request.dto';
+import { Roles } from '../../common/decorators/roles.decorator';
+import { Role } from '@ghostcast/shared';
+import { Audit } from '../../common/decorators/audit.decorator';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
+
+interface UserPayload {
+  id: string;
+  email: string;
+  role: Role;
+}
+
+@Controller('requests')
+export class RequestsController {
+  constructor(private readonly requestsService: RequestsService) {}
+
+  @Get()
+  @Roles(Role.REQUESTER)
+  async findAll(@Query() query: QueryRequestDto) {
+    return this.requestsService.findAll(query);
+  }
+
+  @Get(':id')
+  @Roles(Role.REQUESTER)
+  async findOne(@Param('id') id: string) {
+    return this.requestsService.findById(id);
+  }
+
+  @Post()
+  @Roles(Role.REQUESTER)
+  @Audit({ action: 'CREATE', entity: 'Request' })
+  async create(
+    @Body() createRequestDto: CreateRequestDto,
+    @CurrentUser() user: UserPayload
+  ) {
+    return this.requestsService.create(createRequestDto, user.id);
+  }
+
+  @Post(':id/duplicate')
+  @Roles(Role.REQUESTER)
+  @Audit({ action: 'CREATE', entity: 'Request' })
+  async duplicate(
+    @Param('id') id: string,
+    @CurrentUser() user: UserPayload
+  ) {
+    return this.requestsService.duplicate(id, user.id);
+  }
+
+  @Put(':id')
+  @Roles(Role.REQUESTER)
+  @Audit({ action: 'UPDATE', entity: 'Request' })
+  async update(
+    @Param('id') id: string,
+    @Body() updateRequestDto: UpdateRequestDto
+  ) {
+    return this.requestsService.update(id, updateRequestDto);
+  }
+
+  @Delete(':id')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @Roles(Role.SCHEDULER)
+  @Audit({ action: 'DELETE', entity: 'Request' })
+  async remove(@Param('id') id: string) {
+    await this.requestsService.remove(id);
+  }
+
+  @Delete(':id/assignments')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @Roles(Role.SCHEDULER)
+  @Audit({ action: 'DELETE', entity: 'Assignment' })
+  async removeAssignments(@Param('id') id: string) {
+    await this.requestsService.removeAssignments(id);
+  }
+}

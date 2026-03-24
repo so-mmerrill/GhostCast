@@ -1,0 +1,36 @@
+{
+  "name": "@ghostcast/database",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Database schema and Prisma client for GhostCast",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "build:seed": "tsc --project tsconfig.seed.json",
+    "clean": "rm -rf dist",
+    "generate": "prisma generate",
+    "migrate:dev": "prisma migrate dev",
+    "migrate:deploy": "prisma migrate deploy",
+    "push": "prisma db push",
+    "studio": "prisma studio",
+    "seed": "tsx prisma/seed.ts",
+    "seed:prod": "node dist/prisma/seed.prod.js"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.19.2",
+    "argon2": "^0.41.1",
+    "prisma": "^6.19.2"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+}
