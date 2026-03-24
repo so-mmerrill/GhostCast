@@ -282,6 +282,7 @@ export function GenericDataForm({
 }: GenericDataFormProps) {
   const [showPassword, setShowPassword] = useState(false);
   const [showChangePassword, setShowChangePassword] = useState(false);
+  const isSsoUser = isEditing && !!initialData?.ssoProvider;
 
   // Filter fields based on create/edit mode
   const visibleFields = fields.filter((field) => {
@@ -495,6 +496,8 @@ export function GenericDataForm({
                 variant="outline"
                 size="sm"
                 onClick={() => setShowChangePassword(true)}
+                disabled={isSsoUser}
+                title={isSsoUser ? 'Password cannot be changed for SSO users' : undefined}
               >
                 Change Password
               </Button>
@@ -505,16 +508,25 @@ export function GenericDataForm({
                   id="mustResetPassword"
                   checked={formData.mustResetPassword as boolean}
                   onCheckedChange={(checked) => handleChange('mustResetPassword', checked)}
+                  disabled={isSsoUser}
                 />
                 <label
                   htmlFor="mustResetPassword"
-                  className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                  className={cn(
+                    "text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70",
+                    isSsoUser && "opacity-50 cursor-not-allowed"
+                  )}
                 >
                   Force Password Reset
                 </label>
               </div>
             )}
           </div>
+          {isSsoUser && (
+            <p className="text-xs text-muted-foreground">
+              Password management is disabled for SSO-authenticated users.
+            </p>
+          )}
           {showChangePassword && (
             <div className="space-y-2">
               <Label htmlFor="password">New Password</Label>
