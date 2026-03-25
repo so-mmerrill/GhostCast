@@ -188,7 +188,7 @@ certs/
 | `THROTTLE_MEDIUM_MAX` | `200` | Max requests in medium window |
 | `THROTTLE_LONG_TTL` | `60000` | Long throttle window (ms) |
 | `THROTTLE_LONG_MAX` | `1000` | Max requests in long window |
-| `LOGIN_RATE_LIMIT_TTL` | `60` | Login attempt window (seconds) |
+| `LOGIN_RATE_LIMIT_TTL` | `60000` | Login attempt window (ms) |
 | `LOGIN_RATE_LIMIT_MAX` | `5` | Max login attempts per window |
 
 ### Other

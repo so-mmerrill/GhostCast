@@ -82,6 +82,9 @@ interface Request {
   requesterId: string;
   requester: Requester;
   projectType: ProjectType | null;
+  kantataId: string | null;
+  clientName: string | null;
+  projectName: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -276,7 +279,9 @@ export function RequestsTable({ onNewRequest }: Readonly<RequestsTableProps>) {
         {visibleColumns.title && (
           <TableCell>
             <p className="font-medium">
-              {request.title}
+              {[request.kantataId, request.clientName, request.projectName]
+                .filter(Boolean)
+                .join(' - ') || request.title}
               {request.projectType?.abbreviation && (
                 <span className="text-muted-foreground"> - {request.projectType.abbreviation}</span>
               )}

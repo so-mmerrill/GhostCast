@@ -47,7 +47,7 @@ export const validationSchema = Joi.object({
   THROTTLE_MEDIUM_MAX: Joi.number().default(50),
   THROTTLE_LONG_TTL: Joi.number().default(60000),
   THROTTLE_LONG_MAX: Joi.number().default(300),
-  LOGIN_RATE_LIMIT_TTL: Joi.number().default(60),
+  LOGIN_RATE_LIMIT_TTL: Joi.number().default(60000),
   LOGIN_RATE_LIMIT_MAX: Joi.number().default(5),
 
   // CORS

@@ -13,7 +13,7 @@ import {
 import { AuthGuard } from '@nestjs/passport';
 import { ConfigService } from '@nestjs/config';
 import { SamlAuthGuard } from '../../common/guards/saml-auth.guard';
-import { SkipThrottle } from '@nestjs/throttler';
+import { SkipThrottle, Throttle } from '@nestjs/throttler';
 import { Response, Request } from 'express';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
@@ -26,7 +26,6 @@ import { User } from '@ghostcast/database';
 import { Audit, SkipAudit } from '../../common/decorators/audit.decorator';
 
 @Controller('auth')
-@SkipThrottle({ short: true, medium: true, long: true }) // Auth endpoints should not be rate limited
 export class AuthController {
   constructor(
     private readonly authService: AuthService,
@@ -37,6 +36,8 @@ export class AuthController {
   @UseGuards(AuthGuard('local'))
   @Post('login')
   @HttpCode(HttpStatus.OK)
+  @SkipThrottle({ short: true, medium: true, long: true })
+  @Throttle({ login: {} })
   @Audit({ action: 'LOGIN', entity: 'User' })
   async login(
     @Body() _loginDto: LoginDto,
@@ -64,6 +65,7 @@ export class AuthController {
   @Public()
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
+  @SkipThrottle({ short: true, medium: true, long: true, login: true })
   @SkipAudit()
   async refresh(
     @Body() refreshTokenDto: RefreshTokenDto,
@@ -112,6 +114,7 @@ export class AuthController {
 
   @Public()
   @Get('password-policy')
+  @SkipThrottle({ short: true, medium: true, long: true, login: true })
   @SkipAudit()
   async getPasswordPolicy() {
     return this.authService.getPasswordPolicy();
@@ -156,6 +159,7 @@ export class AuthController {
 
   @Public()
   @Get('sso-config')
+  @SkipThrottle({ short: true, medium: true, long: true, login: true })
   @SkipAudit()
   async getSsoConfig() {
     return {
@@ -166,6 +170,7 @@ export class AuthController {
   @Public()
   @Get('saml/login')
   @UseGuards(SamlAuthGuard)
+  @SkipThrottle({ short: true, medium: true, long: true, login: true })
   async samlLogin() {
     // Passport SAML strategy handles the redirect to ADFS automatically.
     // This method body is never reached.
@@ -174,6 +179,7 @@ export class AuthController {
   @Public()
   @Post('saml/callback')
   @UseGuards(SamlAuthGuard)
+  @SkipThrottle({ short: true, medium: true, long: true, login: true })
   @Audit({ action: 'SSO_LOGIN', entity: 'User' })
   async samlCallback(
     @Req() req: Request,

@@ -43,7 +43,7 @@ export default function configuration() {
       mediumMax: Number.parseInt(process.env.THROTTLE_MEDIUM_MAX || '50', 10),
       longTtl: Number.parseInt(process.env.THROTTLE_LONG_TTL || '60000', 10),
       longMax: Number.parseInt(process.env.THROTTLE_LONG_MAX || '300', 10),
-      loginTtl: Number.parseInt(process.env.LOGIN_RATE_LIMIT_TTL || '60', 10),
+      loginTtl: Number.parseInt(process.env.LOGIN_RATE_LIMIT_TTL || '60000', 10),
       loginMax: Number.parseInt(process.env.LOGIN_RATE_LIMIT_MAX || '5', 10),
     },
 

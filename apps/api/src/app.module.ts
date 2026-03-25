@@ -73,6 +73,11 @@ import { RbacGuard } from './common/guards/rbac.guard';
           ttl: config.get<number>('rateLimit.longTtl', 60000),
           limit: config.get<number>('rateLimit.longMax', 300),
         },
+        {
+          name: 'login',
+          ttl: config.get<number>('rateLimit.loginTtl', 60000),
+          limit: config.get<number>('rateLimit.loginMax', 5),
+        },
       ],
     }),
 
