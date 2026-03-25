@@ -78,7 +78,7 @@ export class PdfResumeImportController {
       resumeText,
     );
 
-    this.logger.log('Parsed resume result:', JSON.stringify(result, null, 2));
+    this.logger.log('Resume Parsed');
 
     return result;
   }

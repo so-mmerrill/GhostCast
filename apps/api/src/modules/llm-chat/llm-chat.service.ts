@@ -1,6 +1,7 @@
 import { Injectable, BadRequestException, Logger } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
+import * as https from 'https';
 import { MembersService } from '../members/members.service';
 import { RequestsService } from '../requests/requests.service';
 import { UserSettingsService } from '../user-settings/user-settings.service';
@@ -95,6 +96,7 @@ interface RequestWithDetails {
 @Injectable()
 export class LlmChatService {
   private readonly logger = new Logger(LlmChatService.name);
+  private readonly httpsAgent = new https.Agent({ rejectUnauthorized: false });
 
   constructor(
     private readonly httpService: HttpService,
@@ -161,10 +163,6 @@ export class LlmChatService {
       ...messages,
     ];
 
-    // Disable TLS verification for self-signed certificates
-    const originalRejectUnauthorized = process.env.NODE_TLS_REJECT_UNAUTHORIZED;
-    process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
-
     try {
       const response = await firstValueFrom(
         this.httpService.post<OpenAIResponse>(
@@ -181,6 +179,7 @@ export class LlmChatService {
               'Content-Type': 'application/json',
             },
             timeout: 60000,
+            httpsAgent: this.httpsAgent,
           },
         ),
       );
@@ -188,8 +187,6 @@ export class LlmChatService {
       return response.data.choices[0]?.message?.content || '';
     } catch (error: unknown) {
       throw this.handleLlmApiError(error, baseUrl, 'chat');
-    } finally {
-      this.restoreTlsSetting(originalRejectUnauthorized);
     }
   }
 
@@ -219,10 +216,6 @@ export class LlmChatService {
       },
     ];
 
-    const originalRejectUnauthorized =
-      process.env.NODE_TLS_REJECT_UNAUTHORIZED;
-    process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
-
     try {
       const response = await firstValueFrom(
         this.httpService.post<OpenAIResponse>(
@@ -239,6 +232,7 @@ export class LlmChatService {
               'Content-Type': 'application/json',
             },
             timeout: 60000,
+            httpsAgent: this.httpsAgent,
           },
         ),
       );
@@ -250,8 +244,6 @@ export class LlmChatService {
     } catch (error: unknown) {
       if (error instanceof BadRequestException) throw error;
       throw this.handleLlmApiError(error, baseUrl, 'document parsing');
-    } finally {
-      this.restoreTlsSetting(originalRejectUnauthorized);
     }
   }
 
@@ -281,10 +273,6 @@ export class LlmChatService {
       },
     ];
 
-    const originalRejectUnauthorized =
-      process.env.NODE_TLS_REJECT_UNAUTHORIZED;
-    process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
-
     try {
       const response = await firstValueFrom(
         this.httpService.post<OpenAIResponse>(
@@ -301,6 +289,7 @@ export class LlmChatService {
               'Content-Type': 'application/json',
             },
             timeout: 120000, // 2 minutes for longer resumes
+            httpsAgent: this.httpsAgent,
           },
         ),
       );
@@ -308,14 +297,12 @@ export class LlmChatService {
       const responseText =
         response.data.choices[0]?.message?.content || '{}';
 
-      this.logger.log('LLM resume parser response:', responseText);
+      this.logger.log('LLM resume parsed');
 
       return this.parseJsonResponse<ParsedResumeFields>(responseText, 'resume');
     } catch (error: unknown) {
       if (error instanceof BadRequestException) throw error;
       throw this.handleLlmApiError(error, baseUrl, 'resume parsing');
-    } finally {
-      this.restoreTlsSetting(originalRejectUnauthorized);
     }
   }
 
@@ -415,17 +402,6 @@ export class LlmChatService {
       'Failed to get response from LLM API';
 
     throw new BadRequestException(errorMessage);
-  }
-
-  /**
-   * Restore TLS setting after API call
-   */
-  private restoreTlsSetting(originalValue: string | undefined): void {
-    if (originalValue === undefined) {
-      delete process.env.NODE_TLS_REJECT_UNAUTHORIZED;
-    } else {
-      process.env.NODE_TLS_REJECT_UNAUTHORIZED = originalValue;
-    }
   }
 
   /** Map of control characters to their escaped JSON equivalents */

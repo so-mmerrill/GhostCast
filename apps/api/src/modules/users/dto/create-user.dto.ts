@@ -5,6 +5,7 @@ import {
   MinLength,
   MaxLength,
   IsEnum,
+  IsBoolean,
 } from 'class-validator';
 import { Role } from '@ghostcast/shared';
 
@@ -31,4 +32,8 @@ export class CreateUserDto {
   @IsEnum(Role)
   @IsOptional()
   role?: Role;
+
+  @IsBoolean()
+  @IsOptional()
+  mustResetPassword?: boolean;
 }
