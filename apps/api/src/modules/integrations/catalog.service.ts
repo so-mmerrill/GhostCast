@@ -8,7 +8,7 @@ import {
 import { AuditService } from '../audit/audit.service';
 import { PluginRegistry } from '../../plugins/plugin.registry';
 
-const CRUD_ACTIONS = new Set(['CREATE', 'UPDATE', 'DELETE']);
+const SKIP_ACTIONS = new Set(['LOGIN', 'LOGOUT', 'SSO_LOGIN', 'VIEW']);
 
 @Injectable()
 export class CatalogService {
@@ -308,7 +308,7 @@ export class CatalogService {
     ]);
 
     const actionOptions = [...distinctActions]
-      .filter((a) => CRUD_ACTIONS.has(a))
+      .filter((a) => !SKIP_ACTIONS.has(a))
       .sort((a, b) => a.localeCompare(b))
       .map((a) => ({ label: a.charAt(0) + a.slice(1).toLowerCase(), value: a }));
 

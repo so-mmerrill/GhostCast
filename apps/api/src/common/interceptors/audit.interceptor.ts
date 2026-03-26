@@ -40,8 +40,8 @@ export class AuditInterceptor implements NestInterceptor {
       [context.getHandler(), context.getClass()]
     );
 
-    // Skip if explicitly marked to skip
-    if (auditOptions?.skip) {
+    // Skip if no audit decorator or explicitly marked to skip
+    if (!auditOptions || auditOptions.skip) {
       return next.handle();
     }
 
@@ -78,6 +78,9 @@ export class AuditInterceptor implements NestInterceptor {
                 action,
                 entity,
                 entityId,
+                oldValue: method === 'DELETE' && preDeleteEntity
+                  ? this.sanitizeData(preDeleteEntity) as object
+                  : undefined,
                 newValue: this.sanitizeData(responseData) as object,
                 ipAddress: this.getClientIp(request),
                 userAgent: request.headers['user-agent'],
@@ -97,6 +100,7 @@ export class AuditInterceptor implements NestInterceptor {
               timestamp: new Date(),
               userId: user?.id,
               userRole: user?.role,
+              userName: user ? `${user.firstName} ${user.lastName}` : undefined,
               metadata: { method, path: request.path },
             });
           } catch (error) {
@@ -153,7 +157,22 @@ export class AuditInterceptor implements NestInterceptor {
     try {
       const model = (this.prisma as any)[modelName];
       if (!model) return null;
-      return await model.findUnique({ where: { id: entityId } });
+
+      // Include relations for entities that need them for notifications
+      const includeMap: Record<string, object> = {
+        Assignment: {
+          members: { include: { member: { select: { firstName: true, lastName: true } } } },
+        },
+        Request: {
+          requiredMembers: { include: { member: { select: { firstName: true, lastName: true } } } },
+        },
+      };
+
+      const include = includeMap[entity];
+      return await model.findUnique({
+        where: { id: entityId },
+        ...(include ? { include } : {}),
+      });
     } catch {
       return null;
     }

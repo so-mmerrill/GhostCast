@@ -9,6 +9,7 @@ export interface AuditEventContext {
   timestamp: Date;
   userId?: string;
   userRole?: string;
+  userName?: string;
   metadata?: Record<string, unknown>;
 }
 

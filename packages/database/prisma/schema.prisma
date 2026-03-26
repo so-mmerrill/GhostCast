@@ -148,7 +148,7 @@ model AssignmentMember {
 
   // Relations
   assignment Assignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
-  member     Member     @relation(fields: [memberId], references: [id])
+  member     Member     @relation(fields: [memberId], references: [id], onDelete: Cascade)
 
   @@unique([assignmentId, memberId])
   @@index([memberId])

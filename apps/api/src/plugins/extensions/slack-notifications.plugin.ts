@@ -106,7 +106,7 @@ export class SlackNotificationsPlugin extends BasePlugin {
   private async handleAuditEvent(event: AuditEvent): Promise<void> {
     if (!this.isEnabled) return;
 
-    const { auditLog } = event;
+    const { auditLog, context } = event;
     const action = auditLog.action;
     const entity = auditLog.entity;
 
@@ -120,17 +120,14 @@ export class SlackNotificationsPlugin extends BasePlugin {
     // Check if we should notify for this entity type
     if (!notifyEntities.includes(entity)) return;
 
-    // Skip non-entity actions like LOGIN/LOGOUT
-    if (['LOGIN', 'LOGOUT', 'VIEW'].includes(action)) return;
-
     try {
-      await this.sendSlackMessage(auditLog);
+      await this.sendSlackMessage(auditLog, context);
     } catch (error) {
       this.logger.error(`Failed to send Slack notification: ${error}`);
     }
   }
 
-  private async sendSlackMessage(auditLog: AuditEvent['auditLog']): Promise<void> {
+  private async sendSlackMessage(auditLog: AuditEvent['auditLog'], context: AuditEvent['context']): Promise<void> {
     const webhookUrl = this.getConfig<string>('webhookUrl');
     const channel = this.getConfig<string>('channel', '#general');
 
@@ -158,17 +155,22 @@ export class SlackNotificationsPlugin extends BasePlugin {
         entityName = newValue.name;
       } else if (typeof newValue.firstName === 'string' && typeof newValue.lastName === 'string') {
         entityName = `${newValue.firstName} ${newValue.lastName}`;
+      } else {
+        // Handle junction entities with nested relation names (e.g., MemberSkill.skill.name, MemberProjectRole.projectRole.name)
+        entityName = this.extractNestedName(newValue) || '';
       }
     }
 
     // Get user who performed the action
-    let performedBy = 'System';
-    if (auditLog.user) {
-      performedBy = `${auditLog.user.firstName} ${auditLog.user.lastName}`;
-    }
+    const performedBy = context.userName;
 
     // Build main message text
-    const entityDisplay = entityName ? `*${entityName}*` : `\`${auditLog.entityId || 'N/A'}\``;
+    let entityDisplay = `\`${auditLog.entityId || 'N/A'}\``;
+    if (entityName) {
+      entityDisplay = `*${entityName}*`;
+    } else if (performedBy) {
+      entityDisplay = `*${performedBy}*`;
+    }
 
     // Extract entity-specific details (members and dates)
     const entityDetails = this.getEntityDetails(auditLog, metadata);
@@ -228,25 +230,56 @@ export class SlackNotificationsPlugin extends BasePlugin {
       case 'CREATE':
         return ':heavy_plus_sign:';
       case 'UPDATE':
+      case 'UPDATE_CONFIG':
+      case 'UPDATE_PROFILE':
+      case 'CHANGE_PASSWORD':
         return ':pencil2:';
       case 'DELETE':
+      case 'DELETE_MAPPINGS':
         return ':x:';
+      case 'ENABLE':
+      case 'INSTALL':
+        return ':white_check_mark:';
+      case 'DISABLE':
+      case 'UNINSTALL':
+        return ':no_entry_sign:';
+      case 'RESTORE':
+        return ':recycle:';
+      case 'SYNC':
+      case 'INGEST':
+        return ':arrows_counterclockwise:';
+      case 'LLM_CHAT':
+        return ':robot_face:';
+      case 'EXECUTE_ACTION':
+        return ':zap:';
+      case 'PARSE':
+        return ':page_facing_up:';
       default:
         return ':bell:';
     }
   }
 
   private getActionVerb(action: string): string {
-    switch (action) {
-      case 'CREATE':
-        return 'created';
-      case 'UPDATE':
-        return 'updated';
-      case 'DELETE':
-        return 'deleted';
-      default:
-        return action.toLowerCase();
-    }
+    const verbs: Record<string, string> = {
+      CREATE: 'created',
+      UPDATE: 'updated',
+      DELETE: 'deleted',
+      ENABLE: 'enabled',
+      DISABLE: 'disabled',
+      INSTALL: 'installed',
+      UNINSTALL: 'uninstalled',
+      UPDATE_CONFIG: 'config updated',
+      UPDATE_PROFILE: 'profile updated',
+      CHANGE_PASSWORD: 'password changed',
+      RESTORE: 'restored',
+      SYNC: 'synced',
+      INGEST: 'ingested',
+      LLM_CHAT: 'chat',
+      EXECUTE_ACTION: 'action executed',
+      PARSE: 'parsed',
+      DELETE_MAPPINGS: 'mappings deleted',
+    };
+    return verbs[action] || action.toLowerCase().replaceAll('_', ' ');
   }
 
   private getEntityDetails(
@@ -346,5 +379,28 @@ export class SlackNotificationsPlugin extends BasePlugin {
     }
 
     return null;
+  }
+
+  private extractNestedName(data: Record<string, unknown>): string | null {
+    let entityName: string | null = null;
+    let memberName: string | null = null;
+
+    for (const [key, value] of Object.entries(data)) {
+      if (value && typeof value === 'object' && !Array.isArray(value)) {
+        const nested = value as Record<string, unknown>;
+        if (key === 'member' && typeof nested.firstName === 'string' && typeof nested.lastName === 'string') {
+          memberName = `${nested.firstName} ${nested.lastName}`;
+        } else if (typeof nested.name === 'string') {
+          entityName = nested.name;
+        } else if (typeof nested.title === 'string') {
+          entityName = nested.title;
+        }
+      }
+    }
+
+    if (entityName && memberName) {
+      return `${entityName} for ${memberName}`;
+    }
+    return entityName || memberName;
   }
 }

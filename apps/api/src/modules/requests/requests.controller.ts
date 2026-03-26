@@ -82,7 +82,7 @@ export class RequestsController {
   @Delete(':id/assignments')
   @HttpCode(HttpStatus.NO_CONTENT)
   @Roles(Role.SCHEDULER)
-  @Audit({ action: 'DELETE', entity: 'Assignment' })
+  @Audit({ action: 'DELETE', entity: 'Request', skip: true })
   async removeAssignments(@Param('id') id: string) {
     await this.requestsService.removeAssignments(id);
   }

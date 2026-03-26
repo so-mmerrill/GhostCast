@@ -301,7 +301,7 @@ export class MembersService {
       },
       create: { memberId, projectRoleId, dateAwarded },
       update: { dateAwarded },
-      include: { projectRole: true },
+      include: { projectRole: true, member: { select: { firstName: true, lastName: true } } },
     });
   }
 
@@ -320,7 +320,7 @@ export class MembersService {
       where: { memberId_skillId: { memberId, skillId } },
       create: { memberId, skillId, level },
       update: { level },
-      include: { skill: true },
+      include: { skill: true, member: { select: { firstName: true, lastName: true } } },
     });
   }
 
