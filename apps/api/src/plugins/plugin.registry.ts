@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { GhostSyncPlugin } from '@ghostcast/plugin-sdk';
+import { CatalogItem } from '@ghostcast/shared';
 
 @Injectable()
 export class PluginRegistry {
@@ -25,5 +26,19 @@ export class PluginRegistry {
 
   has(name: string): boolean {
     return this.plugins.has(name);
+  }
+
+  /**
+   * Collects catalog entries from all registered plugins that implement getCatalogEntry().
+   */
+  getCatalogEntries(): CatalogItem[] {
+    const entries: CatalogItem[] = [];
+    for (const plugin of this.plugins.values()) {
+      const entry = plugin.getCatalogEntry?.();
+      if (entry) {
+        entries.push(entry);
+      }
+    }
+    return entries;
   }
 }

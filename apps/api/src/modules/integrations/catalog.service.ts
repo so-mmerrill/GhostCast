@@ -6,12 +6,16 @@ import {
   IntegrationCategory,
 } from '@ghostcast/shared';
 import { AuditService } from '../audit/audit.service';
+import { PluginRegistry } from '../../plugins/plugin.registry';
 
 const CRUD_ACTIONS = new Set(['CREATE', 'UPDATE', 'DELETE']);
 
 @Injectable()
 export class CatalogService {
-  constructor(private readonly auditService: AuditService) {}
+  constructor(
+    private readonly auditService: AuditService,
+    private readonly pluginRegistry: PluginRegistry,
+  ) {}
   private readonly catalog: CatalogItem[] = [
     // ===========================================
     // Integrations (data flows INTO the app)
@@ -266,62 +270,38 @@ export class CatalogService {
         },
       ],
     },
-    // ===========================================
-    // Extensions (data flows OUT of the app)
-    // ===========================================
-    {
-      id: 'slack-notifications',
-      type: PluginType.EXTENSION,
-      scope: PluginScope.SYSTEM, // System-wide notifications/logging
-      name: 'slack-notifications',
-      displayName: 'Slack Notifications',
-      description:
-        'Send notifications to Slack channels when assignments are created, updated, or deleted. Keep your team informed in real-time.',
-      icon: 'MessageSquare',
-      category: IntegrationCategory.COMMUNICATION,
-      author: 'GhostCast Team',
-      version: '1.0.0',
-      tags: ['Admin', 'slack', 'notifications', 'messaging'],
-      configSchema: [
-        {
-          key: 'webhookUrl',
-          type: 'string',
-          label: 'Webhook URL',
-          description: 'Slack Incoming Webhook URL',
-          required: true,
-        },
-        {
-          key: 'channel',
-          type: 'string',
-          label: 'Default Channel',
-          description: 'Default channel for notifications (e.g., #general)',
-          default: '#general',
-        },
-        {
-          key: 'notifyActions',
-          type: 'multiselect',
-          label: 'Notification Actions',
-          description: 'Which actions should trigger notifications',
-          default: ['CREATE', 'DELETE'],
-          options: [],
-        },
-        {
-          key: 'notifyEntities',
-          type: 'multiselect',
-          label: 'Notification Entities',
-          description: 'Which entity types should trigger notifications',
-          default: ['Assignment', 'Request'],
-          options: [],
-        },
-      ],
-    },
   ];
 
+  /**
+   * Merges static catalog entries with plugin-provided entries.
+   * Plugin-provided entries (from getCatalogEntry()) take precedence over static ones by id.
+   */
+  private buildCatalog(): CatalogItem[] {
+    const pluginEntries = this.pluginRegistry.getCatalogEntries();
+    const pluginIds = new Set(pluginEntries.map((e) => e.id));
+
+    // Static entries that aren't overridden by a plugin
+    const staticOnly = this.catalog.filter((item) => !pluginIds.has(item.id));
+
+    return [...staticOnly, ...pluginEntries];
+  }
+
   findAll(): CatalogItem[] {
-    return this.catalog;
+    return this.buildCatalog();
   }
 
   async findAllWithDynamicOptions(): Promise<CatalogItem[]> {
+    const catalog = this.buildCatalog();
+
+    // Check if any catalog items have multiselect fields with empty options
+    const hasEmptyMultiselect = catalog.some((item) =>
+      item.configSchema?.some(
+        (field) => field.type === 'multiselect' && field.options?.length === 0,
+      ),
+    );
+
+    if (!hasEmptyMultiselect) return catalog;
+
     const [distinctActions, distinctEntities] = await Promise.all([
       this.auditService.getDistinctActions(),
       this.auditService.getDistinctEntities(),
@@ -336,12 +316,15 @@ export class CatalogService {
       .sort((a, b) => a.localeCompare(b))
       .map((e) => ({ label: e.replaceAll(/([A-Z])/g, ' $1').trim(), value: e }));
 
-    return this.catalog.map((item) => {
-      if (item.id !== 'slack-notifications') return item;
+    return catalog.map((item) => {
+      if (!item.configSchema?.some((f) => f.type === 'multiselect' && f.options?.length === 0)) {
+        return item;
+      }
 
       return {
         ...item,
         configSchema: item.configSchema?.map((field) => {
+          if (field.type !== 'multiselect' || (field.options?.length ?? 0) > 0) return field;
           if (field.key === 'notifyActions') return { ...field, options: actionOptions };
           if (field.key === 'notifyEntities') return { ...field, options: entityOptions };
           return field;
@@ -351,24 +334,24 @@ export class CatalogService {
   }
 
   findById(id: string): CatalogItem | undefined {
-    return this.catalog.find((item) => item.id === id);
+    return this.buildCatalog().find((item) => item.id === id);
   }
 
   findByType(type: PluginType): CatalogItem[] {
-    return this.catalog.filter((item) => item.type === type);
+    return this.buildCatalog().filter((item) => item.type === type);
   }
 
   findByCategory(category: IntegrationCategory): CatalogItem[] {
-    return this.catalog.filter((item) => item.category === category);
+    return this.buildCatalog().filter((item) => item.category === category);
   }
 
   findByScope(scope: PluginScope): CatalogItem[] {
-    return this.catalog.filter((item) => item.scope === scope);
+    return this.buildCatalog().filter((item) => item.scope === scope);
   }
 
   search(query: string): CatalogItem[] {
     const lowerQuery = query.toLowerCase();
-    return this.catalog.filter(
+    return this.buildCatalog().filter(
       (item) =>
         item.displayName.toLowerCase().includes(lowerQuery) ||
         item.description.toLowerCase().includes(lowerQuery) ||

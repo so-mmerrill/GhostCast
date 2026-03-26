@@ -1,4 +1,5 @@
 import type { INestApplication } from '@nestjs/common';
+import type { CatalogItem } from '@ghostcast/shared';
 import type {
   GhostSyncPlugin,
   PluginMetadata,
@@ -88,6 +89,15 @@ export abstract class BasePlugin implements GhostSyncPlugin {
    */
   getHooks(): Partial<PluginHooks> {
     return {};
+  }
+
+  /**
+   * Override to self-describe this plugin's catalog entry.
+   * Plugins that return a CatalogItem here are dynamically registered
+   * in the catalog without needing a hardcoded entry in CatalogService.
+   */
+  getCatalogEntry(): CatalogItem | undefined {
+    return undefined;
   }
 
   // ===========================================

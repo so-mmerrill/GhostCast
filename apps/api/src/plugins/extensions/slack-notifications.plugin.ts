@@ -4,7 +4,13 @@ import {
   PluginMetadata,
   PluginHooks,
 } from '@ghostcast/plugin-sdk';
-import { AuditEvent } from '@ghostcast/shared';
+import {
+  AuditEvent,
+  CatalogItem,
+  PluginType,
+  PluginScope,
+  IntegrationCategory,
+} from '@ghostcast/shared';
 
 type DateValue = string | Date | null;
 
@@ -25,6 +31,55 @@ export class SlackNotificationsPlugin extends BasePlugin {
     description: 'Send notifications to Slack channels when events occur',
     author: 'GhostCast Team',
   };
+
+  getCatalogEntry(): CatalogItem {
+    return {
+      id: 'slack-notifications',
+      type: PluginType.EXTENSION,
+      scope: PluginScope.SYSTEM,
+      name: 'slack-notifications',
+      displayName: 'Slack Notifications',
+      description:
+        'Send notifications to Slack channels when assignments are created, updated, or deleted. Keep your team informed in real-time.',
+      icon: 'MessageSquare',
+      category: IntegrationCategory.COMMUNICATION,
+      author: 'GhostCast Team',
+      version: '1.0.0',
+      tags: ['Admin', 'slack', 'notifications', 'messaging'],
+      configSchema: [
+        {
+          key: 'webhookUrl',
+          type: 'string',
+          label: 'Webhook URL',
+          description: 'Slack Incoming Webhook URL',
+          required: true,
+        },
+        {
+          key: 'channel',
+          type: 'string',
+          label: 'Default Channel',
+          description: 'Default channel for notifications (e.g., #general)',
+          default: '#general',
+        },
+        {
+          key: 'notifyActions',
+          type: 'multiselect',
+          label: 'Notification Actions',
+          description: 'Which actions should trigger notifications',
+          default: ['CREATE', 'DELETE'],
+          options: [],
+        },
+        {
+          key: 'notifyEntities',
+          type: 'multiselect',
+          label: 'Notification Entities',
+          description: 'Which entity types should trigger notifications',
+          default: ['Assignment', 'Request'],
+          options: [],
+        },
+      ],
+    };
+  }
 
   async onEnable(config: Record<string, unknown>): Promise<void> {
     await super.onEnable(config);

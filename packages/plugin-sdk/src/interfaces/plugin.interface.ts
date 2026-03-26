@@ -1,4 +1,5 @@
 import type { INestApplication } from '@nestjs/common';
+import type { CatalogItem } from '@ghostcast/shared';
 import type { PluginHooks } from './hooks.interface.js';
 import type { ExtensionPoints } from './extension-points.interface.js';
 
@@ -112,6 +113,13 @@ export interface GhostSyncPlugin {
    * Event hooks the plugin subscribes to
    */
   getHooks?(): Partial<PluginHooks>;
+
+  /**
+   * Returns the catalog entry describing this plugin.
+   * Plugins that implement this method self-register in the catalog,
+   * eliminating the need for a hardcoded entry in CatalogService.
+   */
+  getCatalogEntry?(): CatalogItem | undefined;
 }
 
 /**
