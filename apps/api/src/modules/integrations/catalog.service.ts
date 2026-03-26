@@ -5,9 +5,13 @@ import {
   PluginScope,
   IntegrationCategory,
 } from '@ghostcast/shared';
+import { AuditService } from '../audit/audit.service';
+
+const CRUD_ACTIONS = new Set(['CREATE', 'UPDATE', 'DELETE']);
 
 @Injectable()
 export class CatalogService {
+  constructor(private readonly auditService: AuditService) {}
   private readonly catalog: CatalogItem[] = [
     // ===========================================
     // Integrations (data flows INTO the app)
@@ -299,11 +303,7 @@ export class CatalogService {
           label: 'Notification Actions',
           description: 'Which actions should trigger notifications',
           default: ['CREATE', 'DELETE'],
-          options: [
-            { label: 'Create', value: 'CREATE' },
-            { label: 'Update', value: 'UPDATE' },
-            { label: 'Delete', value: 'DELETE' },
-          ],
+          options: [],
         },
         {
           key: 'notifyEntities',
@@ -311,22 +311,7 @@ export class CatalogService {
           label: 'Notification Entities',
           description: 'Which entity types should trigger notifications',
           default: ['Assignment', 'Request'],
-          options: [
-            { label: 'Users', value: 'User' },
-            { label: 'Members', value: 'Member' },
-            { label: 'Assignments', value: 'Assignment' },
-            { label: 'Requests', value: 'Request' },
-            { label: 'Skills', value: 'Skill' },
-            { label: 'Project Roles', value: 'ProjectRole' },
-            { label: 'Clients', value: 'Client' },
-          ],
-        },
-        {
-          key: 'mentionUsers',
-          type: 'boolean',
-          label: 'Mention Assigned Users',
-          description: 'Mention users in Slack when they are assigned',
-          default: false,
+          options: [],
         },
       ],
     },
@@ -334,6 +319,35 @@ export class CatalogService {
 
   findAll(): CatalogItem[] {
     return this.catalog;
+  }
+
+  async findAllWithDynamicOptions(): Promise<CatalogItem[]> {
+    const [distinctActions, distinctEntities] = await Promise.all([
+      this.auditService.getDistinctActions(),
+      this.auditService.getDistinctEntities(),
+    ]);
+
+    const actionOptions = [...distinctActions]
+      .filter((a) => CRUD_ACTIONS.has(a))
+      .sort((a, b) => a.localeCompare(b))
+      .map((a) => ({ label: a.charAt(0) + a.slice(1).toLowerCase(), value: a }));
+
+    const entityOptions = [...distinctEntities]
+      .sort((a, b) => a.localeCompare(b))
+      .map((e) => ({ label: e.replaceAll(/([A-Z])/g, ' $1').trim(), value: e }));
+
+    return this.catalog.map((item) => {
+      if (item.id !== 'slack-notifications') return item;
+
+      return {
+        ...item,
+        configSchema: item.configSchema?.map((field) => {
+          if (field.key === 'notifyActions') return { ...field, options: actionOptions };
+          if (field.key === 'notifyEntities') return { ...field, options: entityOptions };
+          return field;
+        }),
+      };
+    });
   }
 
   findById(id: string): CatalogItem | undefined {

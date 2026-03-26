@@ -26,7 +26,7 @@ export class IntegrationsService {
   ) {}
 
   async getCatalogWithStatus(): Promise<CatalogWithInstallStatus[]> {
-    const catalog = this.catalogService.findAll();
+    const catalog = await this.catalogService.findAllWithDynamicOptions();
     const installed = await this.prisma.plugin.findMany();
 
     return catalog.map((item) => {
