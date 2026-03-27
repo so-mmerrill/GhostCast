@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate } from '@tanstack/react-router';
 import { useAuth } from '@/features/auth/AuthProvider';
 import { useTheme } from '@/components/theme-provider';
 import { cn } from '@/lib/utils';
-import { CalendarDays, LogOut, Moon, Sun, ChevronLeft, ChevronRight, Users, Shield, ClipboardList, Puzzle, BarChart3, Menu } from 'lucide-react';
+import { CalendarDays, LogOut, Moon, Sun, ChevronLeft, ChevronRight, Users, Shield, ClipboardList, Puzzle, /* BarChart3, */ Menu } from 'lucide-react';
 import { Role } from '@ghostcast/shared';
 import { hasMinimumRole } from '@/lib/route-permissions';
 import logo from '@/assets/logo.png';
@@ -29,7 +29,7 @@ const menuItems: MenuItem[] = [
   { to: '/', icon: CalendarDays, label: 'Schedule' },
   { to: '/requests', icon: ClipboardList, label: 'Requests', minRole: Role.REQUESTER },
   { to: '/members', icon: Users, label: 'Members' },
-  { to: '/dashboards', icon: BarChart3, label: 'Dashboards', minRole: Role.MANAGER },
+  // { to: '/dashboards', icon: BarChart3, label: 'Dashboards', minRole: Role.MANAGER },
   { to: '/integrations', icon: Puzzle, label: 'Plugins' },
   { to: '/admin', icon: Shield, label: 'Administration', minRole: Role.ADMIN },
 ];
