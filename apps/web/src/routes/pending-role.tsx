@@ -28,7 +28,7 @@ function PendingRolePage() {
           </div>
           <CardTitle className="text-2xl">No Role Assigned</CardTitle>
           <CardDescription>
-            Contact your administrator to have a role assigned.
+            Contact your administrator (Matt Merrill/memerrill@specterops.io) to have a role assigned.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
