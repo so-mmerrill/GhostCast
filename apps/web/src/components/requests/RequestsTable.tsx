@@ -17,7 +17,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { CreateRequestModal } from './CreateRequestModal';
+import { CreateRequestModal, type RequestDuplicateData } from './CreateRequestModal';
 import { EditRequestModal } from './EditRequestModal';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import {
@@ -159,6 +159,7 @@ export function RequestsTable({ onNewRequest }: Readonly<RequestsTableProps>) {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [editRequestId, setEditRequestId] = useState<string | null>(null);
   const [duplicatingId, setDuplicatingId] = useState<string | null>(null);
+  const [duplicateData, setDuplicateData] = useState<RequestDuplicateData | null>(null);
   const [deleteRequestId, setDeleteRequestId] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
@@ -191,17 +192,12 @@ export function RequestsTable({ onNewRequest }: Readonly<RequestsTableProps>) {
     e.stopPropagation();
     setDuplicatingId(requestId);
     try {
-      const response = await api.post<{ data: { id: string } }>(`/requests/${requestId}/duplicate`);
-      const newId = response.data.id;
-      toast({
-        title: 'Request duplicated',
-        description: 'A copy of the request has been created.',
-      });
-      queryClient.invalidateQueries({ queryKey: ['requests'] });
-      setEditRequestId(newId);
+      const response = await api.get<{ data: RequestDuplicateData }>(`/requests/${requestId}`);
+      setDuplicateData(response.data);
+      setIsCreateModalOpen(true);
     } catch (error) {
       toast({
-        title: 'Failed to duplicate request',
+        title: 'Failed to load request',
         description: error instanceof Error ? error.message : 'An error occurred',
         variant: 'destructive',
       });
@@ -556,11 +552,15 @@ export function RequestsTable({ onNewRequest }: Readonly<RequestsTableProps>) {
         </div>
       )}
 
-      {/* Create Request Modal - only render if not externally controlled */}
-      {!onNewRequest && (
+      {/* Create Request Modal - render for new requests (if not externally controlled) or duplicates */}
+      {(!onNewRequest || duplicateData) && (
         <CreateRequestModal
           open={isCreateModalOpen}
-          onOpenChange={setIsCreateModalOpen}
+          onOpenChange={(open) => {
+            setIsCreateModalOpen(open);
+            if (!open) setDuplicateData(null);
+          }}
+          initialData={duplicateData}
         />
       )}
 

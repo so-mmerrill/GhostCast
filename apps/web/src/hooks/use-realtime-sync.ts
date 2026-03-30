@@ -92,16 +92,23 @@ export function useRealtimeSync() {
       queryClient.invalidateQueries({ queryKey: ['schedule'], refetchType: 'all' });
     });
 
-    socket.on(WebSocketEvent.REQUEST_UPDATED, (payload?: { id?: string; status?: string }) => {
+    socket.on(WebSocketEvent.REQUEST_UPDATED, (payload?: { data?: { id?: string; status?: string } }) => {
+      const requestId = payload?.data?.id;
+      const requestStatus = payload?.data?.status;
+
       // Immediately update assignment styling in schedule caches
-      if (payload?.id && payload?.status) {
-        updateRequestStatusInCache(queryClient, payload.id, payload.status);
+      if (requestId && requestStatus) {
+        updateRequestStatusInCache(queryClient, requestId, requestStatus);
       }
+
       queryClient.invalidateQueries({ queryKey: ['requests'], refetchType: 'all' });
       queryClient.invalidateQueries({ queryKey: ['requests-paginated'], refetchType: 'all' });
       queryClient.invalidateQueries({ queryKey: ['requests-for-schedule'], refetchType: 'all' });
       queryClient.invalidateQueries({ queryKey: ['requests-for-assignment'], refetchType: 'all' });
-      queryClient.invalidateQueries({ queryKey: ['request'], refetchType: 'all' });
+      // Only invalidate the specific request that changed instead of all cached requests
+      if (requestId) {
+        queryClient.invalidateQueries({ queryKey: ['request', requestId], refetchType: 'all' });
+      }
       queryClient.invalidateQueries({ queryKey: ['schedule'], refetchType: 'all' });
     });
 

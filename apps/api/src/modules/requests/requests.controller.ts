@@ -51,16 +51,6 @@ export class RequestsController {
     return this.requestsService.create(createRequestDto, user.id);
   }
 
-  @Post(':id/duplicate')
-  @Roles(Role.REQUESTER)
-  @Audit({ action: 'CREATE', entity: 'Request' })
-  async duplicate(
-    @Param('id') id: string,
-    @CurrentUser() user: UserPayload
-  ) {
-    return this.requestsService.duplicate(id, user.id);
-  }
-
   @Put(':id')
   @Roles(Role.REQUESTER)
   @Audit({ action: 'UPDATE', entity: 'Request' })

@@ -856,13 +856,13 @@ export function EditRequestModal({
         description: `"${projectName}" has been updated successfully.`,
       });
 
+      // Only invalidate the specific request and the requests list here.
+      // The WebSocket REQUEST_UPDATED event handles the broader invalidation
+      // (schedule, requests-paginated, requests-for-schedule, assignments)
+      // to avoid a burst of concurrent requests that triggers rate limiting (429).
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['requests'], refetchType: 'all' }),
-        queryClient.invalidateQueries({ queryKey: ['requests-paginated'], refetchType: 'all' }),
-        queryClient.invalidateQueries({ queryKey: ['requests-for-schedule'], refetchType: 'all' }),
         queryClient.invalidateQueries({ queryKey: ['request', requestId], refetchType: 'all' }),
-        queryClient.invalidateQueries({ queryKey: ['schedule'], refetchType: 'all' }),
-        queryClient.invalidateQueries({ queryKey: ['assignments'], refetchType: 'all' }),
       ]);
       handleClose(false);
       onSuccess?.();

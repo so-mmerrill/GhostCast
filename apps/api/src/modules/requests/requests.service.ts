@@ -272,56 +272,6 @@ export class RequestsService {
     return request;
   }
 
-  async duplicate(id: string, requesterId: string) {
-    const source = await this.findById(id);
-
-    const request = await this.prisma.request.create({
-      data: {
-        title: `Copy of ${source.title}`,
-        description: source.description,
-        status: 'UNSCHEDULED',
-        requesterId,
-        projectTypeId: source.projectTypeId,
-        requestedStartDate: source.requestedStartDate,
-        requestedEndDate: source.requestedEndDate,
-        projectId: source.projectId,
-        clientName: source.clientName,
-        projectName: source.projectName,
-        executionWeeks: source.executionWeeks,
-        preparationWeeks: source.preparationWeeks,
-        reportingWeeks: source.reportingWeeks,
-        requiredMemberCount: source.requiredMemberCount,
-        travelRequired: source.travelRequired,
-        travelLocation: source.travelLocation,
-        timezone: source.timezone,
-        urlLink: source.urlLink,
-        studentCount: source.studentCount,
-        format: source.format,
-        location: source.location,
-        notes: source.notes,
-        requiredMembers: source.requiredMembers?.length
-          ? {
-              create: source.requiredMembers.map((rm: { memberId: string }) => ({
-                memberId: rm.memberId,
-              })),
-            }
-          : undefined,
-        requiredSkills: source.requiredSkills?.length
-          ? {
-              create: source.requiredSkills.map((rs: { skillId: string }) => ({
-                skillId: rs.skillId,
-              })),
-            }
-          : undefined,
-      },
-      include: requestInclude,
-    });
-
-    this.realtimeGateway.emitToAll(WebSocketEvent.REQUEST_CREATED, request);
-
-    return request;
-  }
-
   async remove(id: string) {
     await this.findById(id);
 

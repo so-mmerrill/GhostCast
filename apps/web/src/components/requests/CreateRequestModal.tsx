@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
@@ -85,10 +85,37 @@ interface Skill {
   isActive: boolean;
 }
 
+export interface RequestDuplicateData {
+  title?: string;
+  status?: RequestStatus;
+  description?: string | null;
+  projectId?: string | null;
+  kantataId?: string | null;
+  clientName?: string | null;
+  projectName?: string | null;
+  projectTypeId?: string | null;
+  requestedStartDate?: string | null;
+  requestedEndDate?: string | null;
+  preparationWeeks?: number;
+  executionWeeks?: number;
+  reportingWeeks?: number;
+  travelRequired?: boolean;
+  travelLocation?: string | null;
+  timezone?: string | null;
+  urlLink?: string | null;
+  studentCount?: number;
+  format?: string | null;
+  location?: string | null;
+  requiredMemberCount?: number;
+  requiredMembers?: Array<{ memberId: string; member: Member }>;
+  requiredSkills?: Array<{ skillId: string }>;
+}
+
 interface CreateRequestModalProps {
   readonly open: boolean;
   readonly onOpenChange: (open: boolean) => void;
   readonly onSuccess?: () => void;
+  readonly initialData?: RequestDuplicateData | null;
 }
 
 const STATUS_OPTIONS = [
@@ -101,6 +128,7 @@ export function CreateRequestModal({
   open,
   onOpenChange,
   onSuccess,
+  initialData,
 }: Readonly<CreateRequestModalProps>) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -159,6 +187,47 @@ export function CreateRequestModal({
   const isQuipEnabled = userPlugins.some(
     (p) => p.catalogId === 'quip-document-import' && p.isEnabled
   );
+
+  // Populate form from initialData (used for duplicating requests)
+  useEffect(() => {
+    if (open && initialData) {
+      setProjectName(initialData.title || initialData.projectName || '');
+      setStatus(RequestStatus.UNSCHEDULED);
+      setDescription(initialData.description || '');
+      setJiraId(initialData.projectId || '');
+      setKantataId(initialData.kantataId || '');
+      setClientName(initialData.clientName || '');
+      setProjectTypeId(initialData.projectTypeId || '');
+      setRequestedStartDate(
+        initialData.requestedStartDate
+          ? new Date(initialData.requestedStartDate).toISOString().split('T')[0]
+          : ''
+      );
+      setRequestedEndDate(
+        initialData.requestedEndDate
+          ? new Date(initialData.requestedEndDate).toISOString().split('T')[0]
+          : ''
+      );
+      setPreparationWeeks(String(initialData.preparationWeeks || 0));
+      setExecutionWeeks(String(initialData.executionWeeks || 0));
+      setReportingWeeks(String(initialData.reportingWeeks || 0));
+      setTravelRequired(initialData.travelRequired || false);
+      setTravelLocation(initialData.travelLocation || '');
+      setTimezone(initialData.timezone || '');
+      setUrlLink(initialData.urlLink || '');
+      setStudentCount(String(initialData.studentCount || 0));
+      setFormat(initialData.format || '');
+      setLocation(initialData.location || '');
+      setRequiredMemberCount(String(initialData.requiredMemberCount || 0));
+
+      const memberIds = initialData.requiredMembers?.map((rm) => rm.memberId) || [];
+      const memberObjs = initialData.requiredMembers?.map((rm) => rm.member) || [];
+      setSelectedMemberIds(memberIds);
+      setSelectedMemberObjects(memberObjs);
+      setMemberSelectionMode(memberIds.length > 0 ? 'specific' : 'count');
+      setSelectedSkillIds(initialData.requiredSkills?.map((rs) => rs.skillId) || []);
+    }
+  }, [open, initialData]);
 
   // Fetch project types
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
