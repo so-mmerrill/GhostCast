@@ -229,3 +229,173 @@ export function adjustColor(hexColor: string, percent: number): string {
     .toString(16)
     .slice(1)}`;
 }
+
+/**
+ * Simple string hash that produces a stable numeric value for a given input.
+ */
+function hashString(str: string): number {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    const char = str.codePointAt(i) ?? 0;
+    hash = ((hash << 5) - hash) + char;
+    hash = Math.trunc(hash);
+  }
+  return Math.abs(hash);
+}
+
+/**
+ * 30 visually distinct, color-deficiency-safe assignment colors.
+ */
+const DISTINCT_COLORS = [
+  '#4E79A7', // Blue
+  '#FF7043', // Coral
+  '#59A14F', // Green (keep 1 primary)
+  '#8E24AA', // Vivid Purple
+  '#F28E2B', // Orange
+  '#00838F', // Deep Teal (keep 1 strong teal)
+  '#E15759', // Red
+  '#3949AB', // Indigo
+
+  '#D81B60', // Strong Pink
+  '#1E88E5', // Bright Blue
+  '#9C755F', // Brown
+  '#00ACC1', // Cyan (distinct from teal)
+
+  '#C62828', // Deep Red
+  '#FB8C00', // Vivid Orange
+  '#AB47BC', // Magenta Purple
+  '#5C6BC0', // Soft Indigo
+
+  '#4E342E', // Deep Brown
+  '#EC407A', // Vibrant Pink
+  '#B07AA1', // Purple
+  '#FF9DA7', // Pink
+
+  '#2E7D32', // Deep Green (replaces lighter greens)
+  '#A1887F', // Tan (adds contrast vs browns)
+  '#4A6FA5', // Blue Slate (anchor color)
+  '#263238'  // Deep Blue-Black (strong separator)
+] as const;
+
+/**
+ * Derive a deterministic color from a request ID.
+ * Uses a curated palette of visually distinct colors so that
+ * no two colors are perceptually close, even with many requests.
+ * The same ID always produces the same color across all sessions.
+ */
+export function getRequestColor(requestId: string): string {
+  // Strip the common CUID prefix (first 5 chars) to reach the unique portion, then salt
+  const uniquePart = requestId.length > 5 ? requestId.slice(5) : requestId;
+  const hash = hashString(uniquePart + 'gc_salt_v2');
+  return DISTINCT_COLORS[hash % DISTINCT_COLORS.length]!;
+}
+
+/**
+ * Hash a request ID to its preferred palette index.
+ */
+function getRequestColorIndex(requestId: string): number {
+  const uniquePart = requestId.length > 5 ? requestId.slice(5) : requestId;
+  const hash = hashString(uniquePart + 'gc_salt_v2');
+  return hash % DISTINCT_COLORS.length;
+}
+
+/**
+ * Generate deterministic colors for a set of request IDs with collision resolution.
+ * Each ID is hashed to a preferred palette index. If two IDs collide (same index),
+ * the later one is shifted to the next unused index so no two requests share a color.
+ * Returns a Map of requestId -> hex color string.
+ */
+export function generateRequestColors(requestIds: string[]): Map<string, string> {
+  const map = new Map<string, string>();
+  const usedIndices = new Set<number>();
+
+  for (const id of requestIds) {
+    let index = getRequestColorIndex(id);
+
+    // If this index is already taken, find the next unused one
+    if (usedIndices.has(index)) {
+      const paletteSize = DISTINCT_COLORS.length;
+      for (let offset = 1; offset < paletteSize; offset++) {
+        const candidate = (index + offset) % paletteSize;
+        if (!usedIndices.has(candidate)) {
+          index = candidate;
+          break;
+        }
+      }
+    }
+
+    usedIndices.add(index);
+    map.set(id, DISTINCT_COLORS[index]!);
+  }
+
+  return map;
+}
+
+/**
+ * Maximally distinct color palette for client-based coloring.
+ * Each color is chosen to be far apart in hue, saturation, and lightness
+ * so no two are easily confused, even at a glance.
+ */
+const CLIENT_COLORS = [
+  '#4E79A7', // Blue
+  '#1E88E5', // Bright Blue
+  '#3949AB', // Indigo
+
+  '#F28E2B', // Orange
+  '#FF7043', // Coral
+
+  '#E15759', // Red
+  '#C62828', // Deep Red
+
+  '#8E24AA', // Purple
+  '#AB47BC', // Magenta Purple
+
+  '#D81B60', // Strong Pink
+  '#EC407A', // Vibrant Pink
+
+  '#2E7D32', // Deep Green
+
+  '#00838F', // Teal
+  '#00ACC1', // Cyan
+
+  '#9C755F', // Brown
+  '#4E342E', // Deep Brown
+] as const;
+
+/**
+ * Hash a client name to its preferred palette index.
+ */
+function getClientColorIndex(clientName: string): number {
+  const hash = hashString(clientName + 'gc_client_salt_v1');
+  return hash % CLIENT_COLORS.length;
+}
+
+/**
+ * Generate deterministic colors for a set of client names with collision resolution.
+ * Uses a dedicated CLIENT_COLORS palette with maximally distinct colors.
+ * Returns a Map of clientName -> hex color string.
+ */
+export function generateClientColors(clientNames: string[]): Map<string, string> {
+  const map = new Map<string, string>();
+  const usedIndices = new Set<number>();
+
+  for (const name of clientNames) {
+    let index = getClientColorIndex(name);
+
+    if (usedIndices.has(index)) {
+      const paletteSize = CLIENT_COLORS.length;
+      for (let offset = 1; offset < paletteSize; offset++) {
+        const candidate = (index + offset) % paletteSize;
+        if (!usedIndices.has(candidate)) {
+          index = candidate;
+          break;
+        }
+      }
+    }
+
+    usedIndices.add(index);
+    map.set(name, CLIENT_COLORS[index]!);
+  }
+
+  return map;
+}

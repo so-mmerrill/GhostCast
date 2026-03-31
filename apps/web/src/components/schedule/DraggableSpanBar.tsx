@@ -1,7 +1,8 @@
 import { useState, useEffect, memo } from 'react';
 import { Lock } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { AssignmentStatus, RequestStatus, REQUEST_STATUS_COLORS, AssignmentSelection } from '@ghostcast/shared';
+import { AssignmentStatus, RequestStatus, REQUEST_STATUS_COLORS, AssignmentSelection, getContrastColor } from '@ghostcast/shared';
+import type { ColorMode } from '@/stores/schedule-view-store';
 import { CellPresenceIndicator } from './CellPresenceIndicator';
 import palmTreeBlack from '@/assets/palm_tree_black.png';
 import palmTreeWhite from '@/assets/palm_tree_white.png';
@@ -31,6 +32,7 @@ interface Assignment {
   request?: {
     id: string;
     status: string;
+    clientName?: string | null;
   } | null;
   projectType: {
     id: string;
@@ -123,9 +125,40 @@ function formatAssignmentTitle(assignment: Assignment): { displayTitle: string; 
   return { displayTitle, isBold };
 }
 
+// Helper to resolve the base color for an assignment depending on color mode
+function resolveBaseColor(
+  assignment: Assignment,
+  colorMode: ColorMode,
+  requestColorMap?: Map<string, string>,
+  clientColorMap?: Map<string, string>,
+): string {
+  if (colorMode === 'assignment') {
+    const reqId = assignment.request?.id ?? (assignment as { requestId?: string }).requestId;
+    if (reqId && requestColorMap?.has(reqId)) {
+      return requestColorMap.get(reqId)!;
+    }
+    // No linked request → dark gray
+    return '#374151';
+  }
+  if (colorMode === 'client') {
+    const clientName = assignment.request?.clientName;
+    if (clientName && clientColorMap?.has(clientName)) {
+      return clientColorMap.get(clientName)!;
+    }
+    // No client name → dark gray (same as assignment mode)
+    return '#374151';
+  }
+  return assignment.projectType.color;
+}
+
 // Helper function to determine assignment styling based on request status
-function getAssignmentStyle(assignment: Assignment): { background: string; border: string | null; textColor: string } {
-  // If no linked request, check metadata.displayStatus or default to SCHEDULED (project color)
+function getAssignmentStyle(
+  assignment: Assignment,
+  colorMode: ColorMode = 'project-type',
+  requestColorMap?: Map<string, string>,
+  clientColorMap?: Map<string, string>,
+): { background: string; border: string | null; textColor: string } {
+  // If no linked request, check metadata.displayStatus or default to SCHEDULED
   if (!assignment.request) {
     const displayStatus = assignment.metadata?.displayStatus as string | undefined;
 
@@ -139,26 +172,29 @@ function getAssignmentStyle(assignment: Assignment): { background: string; borde
       return { background: '#FEF08A', border: '#000000', textColor: 'black' };
     }
 
-    // Default to SCHEDULED - use project type color
-    return { background: assignment.projectType.color, border: null, textColor: 'white' };
+    // Default to SCHEDULED - use base color
+    const bg = resolveBaseColor(assignment, colorMode, requestColorMap, clientColorMap);
+    return { background: bg, border: '#000000', textColor: getContrastColor(bg) };
   }
 
-  // If request is Scheduled, use project type color
+  // If request is Scheduled, use base color
   if (assignment.request.status === RequestStatus.SCHEDULED) {
-    return { background: assignment.projectType.color, border: null, textColor: 'white' };
+    const bg = resolveBaseColor(assignment, colorMode, requestColorMap, clientColorMap);
+    return { background: bg, border: '#000000', textColor: getContrastColor(bg) };
   }
 
-  // Otherwise use the request status styling
+  // Otherwise use the request status styling (UNSCHEDULED/FORECAST overrides apply in all modes)
   const statusStyle = REQUEST_STATUS_COLORS[assignment.request.status as keyof typeof REQUEST_STATUS_COLORS];
   if (statusStyle) {
     return {
       background: statusStyle.background,
-      border: statusStyle.border,
+      border: statusStyle.border ?? '#000000',
       textColor: statusStyle.background === '#FFFFFF' || statusStyle.background === '#FEF08A' ? 'black' : 'white'
     };
   }
 
-  return { background: assignment.projectType.color, border: null, textColor: 'white' };
+  const bg = resolveBaseColor(assignment, colorMode, requestColorMap, clientColorMap);
+  return { background: bg, border: '#000000', textColor: getContrastColor(bg) };
 }
 
 // Helper to compute border radius based on visibility
@@ -209,11 +245,6 @@ function computeBoxShadow(
   return undefined;
 }
 
-// Helper to compute border style
-function computeBorderStyle(border: string | null): string | undefined {
-  return border ? `2px solid ${border}` : undefined;
-}
-
 // Helper to get presence color from users array
 function getPresenceColor(presenceUsers: AssignmentSelection[]): string | undefined {
   return presenceUsers.length > 0 ? presenceUsers[0]?.user.color : undefined;
@@ -234,6 +265,12 @@ interface DraggableSpanBarProps {
   presenceUsers?: AssignmentSelection[];
   /** Zoom level for scaling presence indicators */
   zoomLevel?: number;
+  /** Color mode: 'project-type' (ProjectType) or 'request' (unique per request) */
+  colorMode?: ColorMode;
+  /** Map of requestId -> hex color, used when colorMode is 'assignment' */
+  requestColorMap?: Map<string, string>;
+  /** Map of clientName -> hex color, used when colorMode is 'client' */
+  clientColorMap?: Map<string, string>;
 }
 
 function DraggableSpanBarInner({
@@ -249,13 +286,16 @@ function DraggableSpanBarInner({
   isCut = false,
   presenceUsers = [],
   zoomLevel = 1,
+  colorMode = 'project-type',
+  requestColorMap,
+  clientColorMap,
 }: Readonly<DraggableSpanBarProps>) {
   const [isDragging, setIsDragging] = useState(false);
   const isDarkMode = useIsDarkMode();
   const { assignment, leftPx, widthPx, lane, totalLanes, startsBeforeVisible, endsAfterVisible } =
     span;
   const { displayTitle, isBold } = formatAssignmentTitle(assignment);
-  const style = getAssignmentStyle(assignment);
+  const style = getAssignmentStyle(assignment, colorMode, requestColorMap, clientColorMap);
   const isHoliday = isHolidayAssignment(assignment);
 
   // Calculate height based on available space and number of lanes
@@ -327,19 +367,21 @@ function DraggableSpanBarInner({
       }}
     >
       <div
-        className="span-bar-content relative flex items-center justify-center overflow-hidden text-xs"
+        className="span-bar-content relative flex items-center justify-center overflow-hidden"
         style={{
           position: 'absolute',
-          left: 0,
-          width: '100%',
+          left: 0.5,
+          width: 'calc(100% - 1px)',
           top: topOffset,
           height: barHeight,
+          boxSizing: 'border-box',
           backgroundColor: style.background,
           color: style.textColor,
-          border: computeBorderStyle(style.border),
+          border: style.border ? `1.5px solid ${style.border}` : undefined,
           ...computeBorderRadius(startsBeforeVisible, endsAfterVisible),
           boxShadow: computeBoxShadow(isSelected, isHighlighted, presenceColor),
           fontWeight: isBold ? 700 : 500,
+          fontSize: Math.max(Math.round(12 * Math.min(zoomLevel, 1)), 11),
         }}
         title={computeTooltipTitle(isHoliday, assignment, displayTitle)}
       >
@@ -391,5 +433,8 @@ export const DraggableSpanBar = memo(DraggableSpanBarInner, (prev, next) => {
   if (prev.onDragStart !== next.onDragStart) return false;
   if (prev.onDragEnd !== next.onDragEnd) return false;
   if (prev.presenceUsers !== next.presenceUsers) return false;
+  if (prev.colorMode !== next.colorMode) return false;
+  if (prev.requestColorMap !== next.requestColorMap) return false;
+  if (prev.clientColorMap !== next.clientColorMap) return false;
   return true;
 });

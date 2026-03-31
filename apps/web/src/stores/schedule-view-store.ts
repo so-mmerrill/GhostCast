@@ -1,6 +1,8 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 
+export type ColorMode = 'project-type' | 'assignment' | 'client';
+
 interface ScheduleViewState {
   /** ISO date string of the month the user was last viewing (e.g. "2026-03-01") */
   lastViewedMonth: string | null;
@@ -14,11 +16,14 @@ interface ScheduleViewState {
   collapsedDepartments: string[];
   /** Whether the requests panel is collapsed */
   isRequestsPanelCollapsed: boolean;
+  /** Color mode: 'assessment' uses ProjectType colors, 'request' uses unique per-request colors */
+  colorMode: ColorMode;
   setLastViewedMonth: (month: string) => void;
   setSavedRange: (before: number, after: number) => void;
   setZoomLevel: (level: number) => void;
   setCollapsedDepartments: (departments: string[]) => void;
   setIsRequestsPanelCollapsed: (collapsed: boolean) => void;
+  setColorMode: (mode: ColorMode) => void;
 }
 
 export const useScheduleViewStore = create<ScheduleViewState>()(
@@ -30,6 +35,7 @@ export const useScheduleViewStore = create<ScheduleViewState>()(
       zoomLevel: 1,
       collapsedDepartments: [],
       isRequestsPanelCollapsed: true,
+      colorMode: 'project-type' as ColorMode,
       setLastViewedMonth: (month) => set({ lastViewedMonth: month }),
       setSavedRange: (before, after) =>
         set({ savedMonthsBefore: before, savedMonthsAfter: after }),
@@ -38,6 +44,7 @@ export const useScheduleViewStore = create<ScheduleViewState>()(
         set({ collapsedDepartments: departments }),
       setIsRequestsPanelCollapsed: (collapsed) =>
         set({ isRequestsPanelCollapsed: collapsed }),
+      setColorMode: (mode) => set({ colorMode: mode }),
     }),
     {
       name: 'ghostcast-schedule-view',

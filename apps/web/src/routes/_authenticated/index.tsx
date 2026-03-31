@@ -33,7 +33,7 @@ export const Route = createFileRoute('/_authenticated/')({
 function SchedulePage() {
   // Zoom state (persisted in schedule view store)
   const ZOOM_LEVELS = [0.5, 0.6, 0.7, 0.8, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2];
-  const { zoomLevel, setZoomLevel } = useScheduleViewStore();
+  const { zoomLevel, setZoomLevel, colorMode, setColorMode } = useScheduleViewStore();
 
   const handleZoomIn = useCallback(() => {
     const idx = ZOOM_LEVELS.indexOf(zoomLevel);
@@ -108,8 +108,35 @@ function SchedulePage() {
           <h1 className="text-2xl font-bold tracking-tight">Schedule</h1>
         </div>
 
-        {/* Legend - progressive hiding */}
+        {/* Color mode toggle + Legend */}
         <div className="flex items-center justify-end gap-2">
+            {/* Assessment / Request color mode toggle */}
+            <div className="hidden sm:flex items-center rounded-md border border-input">
+              <Button
+                variant={colorMode === 'project-type' ? 'default' : 'ghost'}
+                size="sm"
+                className="rounded-r-none h-8 px-3 text-xs"
+                onClick={() => setColorMode('project-type')}
+              >
+                Project Types
+              </Button>
+              <Button
+                variant={colorMode === 'assignment' ? 'default' : 'ghost'}
+                size="sm"
+                className="rounded-none h-8 px-3 text-xs"
+                onClick={() => setColorMode('assignment')}
+              >
+                Assignments
+              </Button>
+              <Button
+                variant={colorMode === 'client' ? 'default' : 'ghost'}
+                size="sm"
+                className="rounded-l-none h-8 px-3 text-xs"
+                onClick={() => setColorMode('client')}
+              >
+                Clients
+              </Button>
+            </div>
             {/* Mobile Menu - visible only on mobile */}
           <Sheet>
             <SheetTrigger asChild>
@@ -122,6 +149,36 @@ function SchedulePage() {
                 <SheetTitle>Menu</SheetTitle>
               </SheetHeader>
               <div className="mt-6 space-y-6">
+                {/* Color Mode */}
+                <div>
+                  <h4 className="mb-2 text-sm font-semibold text-muted-foreground">Color Mode</h4>
+                  <div className="flex items-center rounded-md border border-input">
+                    <Button
+                      variant={colorMode === 'project-type' ? 'default' : 'ghost'}
+                      size="sm"
+                      className="flex-1 rounded-r-none h-8 text-xs"
+                      onClick={() => setColorMode('project-type')}
+                    >
+                      Project Types
+                    </Button>
+                    <Button
+                      variant={colorMode === 'assignment' ? 'default' : 'ghost'}
+                      size="sm"
+                      className="flex-1 rounded-none h-8 text-xs"
+                      onClick={() => setColorMode('assignment')}
+                    >
+                      Assignments
+                    </Button>
+                    <Button
+                      variant={colorMode === 'client' ? 'default' : 'ghost'}
+                      size="sm"
+                      className="flex-1 rounded-l-none h-8 text-xs"
+                      onClick={() => setColorMode('client')}
+                    >
+                      Clients
+                    </Button>
+                  </div>
+                </div>
                 {/* Legend */}
                 <div className="max-h-[300px] overflow-y-auto">
                   <h4 className="mb-3 text-sm font-semibold text-muted-foreground">Legend</h4>

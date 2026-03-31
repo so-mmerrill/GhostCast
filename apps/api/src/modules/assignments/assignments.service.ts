@@ -194,6 +194,7 @@ export class AssignmentsService {
             select: {
               id: true,
               status: true,
+              clientName: true,
             },
           },
           members: {
@@ -298,6 +299,7 @@ export class AssignmentsService {
           select: {
             id: true,
             status: true,
+            clientName: true,
           },
         },
         members: {

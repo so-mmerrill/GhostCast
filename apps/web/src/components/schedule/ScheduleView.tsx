@@ -34,7 +34,8 @@ import { useCellPresence } from '@/hooks/use-cell-presence';
 import { useScheduleUndoRedo } from '@/hooks/use-schedule-undo-redo';
 import { useUndoRedoStore } from '@/stores/undo-redo-store';
 import { useScheduleViewStore } from '@/stores/schedule-view-store';
-import { CellSelection, AssignmentSelection, AssignmentStatus, Role } from '@ghostcast/shared';
+import { CellSelection, AssignmentSelection, AssignmentStatus, Role, generateRequestColors, generateClientColors } from '@ghostcast/shared';
+import type { ColorMode } from '@/stores/schedule-view-store';
 import { useAuth } from '@/features/auth/AuthProvider';
 import { refreshScheduleCache, findAssignmentDatesInCache, removeAssignmentFromCache } from '@/lib/schedule-cache';
 
@@ -72,6 +73,7 @@ interface Assignment {
   request?: {
     id: string;
     status: string;
+    clientName?: string | null;
   } | null;
   projectType: {
     id: string;
@@ -384,6 +386,9 @@ interface MemberRowProps {
   onDragOver: (e: React.DragEvent, memberId: string) => void;
   onDragLeave: (e: React.DragEvent) => void;
   onDrop: (e: React.DragEvent, memberId: string) => void;
+  colorMode: ColorMode;
+  requestColorMap: Map<string, string>;
+  clientColorMap: Map<string, string>;
 }
 
 const MemberRow = memo(function MemberRow({
@@ -419,20 +424,23 @@ const MemberRow = memo(function MemberRow({
   onDragOver,
   onDragLeave,
   onDrop,
+  colorMode,
+  requestColorMap,
+  clientColorMap,
 }: Readonly<MemberRowProps>) {
   // Event delegation: single handler on the row reads data-day-index from target
   const handleRowMouseDown = useCallback((e: React.MouseEvent) => {
     const el = (e.target as HTMLElement).closest('[data-day-index]');
     if (!el) return;
-    const index = Number(el.getAttribute('data-day-index'));
-    if (!isNaN(index)) onCellMouseDown(memberId, index);
+    const index = Number((el as HTMLElement).dataset.dayIndex);
+    if (!Number.isNaN(index)) onCellMouseDown(memberId, index);
   }, [memberId, onCellMouseDown]);
 
   const handleRowMouseEnter = useCallback((e: React.MouseEvent) => {
     const el = (e.target as HTMLElement).closest('[data-day-index]');
     if (!el) return;
-    const index = Number(el.getAttribute('data-day-index'));
-    if (!isNaN(index)) onCellMouseEnter(memberId, index);
+    const index = Number((el as HTMLElement).dataset.dayIndex);
+    if (!Number.isNaN(index)) onCellMouseEnter(memberId, index);
   }, [memberId, onCellMouseEnter]);
 
   const handleSpanClick = useCallback((a: Assignment) => {
@@ -554,6 +562,9 @@ const MemberRow = memo(function MemberRow({
           isCut={clipboardMode === 'cut' && clipboardAssignmentId === span.assignment.id}
           presenceUsers={assignmentPresenceMap.get(span.assignment.id)}
           zoomLevel={zoomLevel}
+          colorMode={colorMode}
+          requestColorMap={requestColorMap}
+          clientColorMap={clientColorMap}
         />
       ))}
     </div>
@@ -575,6 +586,9 @@ const MemberRow = memo(function MemberRow({
   if (prev.cellPresenceMap !== next.cellPresenceMap) return false;
   if (prev.cellHighlightMap !== next.cellHighlightMap) return false;
   if (prev.assignmentPresenceMap !== next.assignmentPresenceMap) return false;
+  if (prev.colorMode !== next.colorMode) return false;
+  if (prev.requestColorMap !== next.requestColorMap) return false;
+  if (prev.clientColorMap !== next.clientColorMap) return false;
   if (prev.highlightedAssignmentIds !== next.highlightedAssignmentIds) return false;
 
   // Only compare selectedDays/selectedMembers if this member could be affected
@@ -623,6 +637,7 @@ export function ScheduleView({ zoomLevel, onZoomIn, onZoomOut, onZoomReset }: Re
     setIsRequestsPanelCollapsed,
     collapsedDepartments: storedCollapsedDepts,
     setCollapsedDepartments: setStoredCollapsedDepts,
+    colorMode,
   } = useScheduleViewStore();
   const collapsedDepartments = useMemo(() => new Set(storedCollapsedDepts), [storedCollapsedDepts]);
   const [collapsedManagerIds, setCollapsedManagerIds] = useState<Set<string>>(new Set());
@@ -1116,6 +1131,32 @@ export function ScheduleView({ zoomLevel, onZoomIn, onZoomOut, onZoomReset }: Re
         .map((a) => a.id)
     );
   }, [highlightedRequestId, data?.data.assignments]);
+
+  // Compute unique request color map for 'request' color mode
+  const requestColorMap = useMemo(() => {
+    if (colorMode !== 'assignment' || !data?.data.assignments) return new Map<string, string>();
+    const requestIds = Array.from(
+      new Set(
+        data.data.assignments
+          .map((a) => a.requestId ?? a.request?.id)
+          .filter((id): id is string => !!id)
+      )
+    );
+    return generateRequestColors(requestIds);
+  }, [colorMode, data?.data.assignments]);
+
+  // Compute unique client color map for 'client' color mode
+  const clientColorMap = useMemo(() => {
+    if (colorMode !== 'client' || !data?.data.assignments) return new Map<string, string>();
+    const clientNames = Array.from(
+      new Set(
+        data.data.assignments
+          .map((a) => a.request?.clientName)
+          .filter((name): name is string => !!name)
+      )
+    );
+    return generateClientColors(clientNames);
+  }, [colorMode, data?.data.assignments]);
 
   // Handler to toggle highlight for a request's assignments
   const handleHighlightRequest = useCallback((requestId: string) => {
@@ -2962,6 +3003,9 @@ export function ScheduleView({ zoomLevel, onZoomIn, onZoomOut, onZoomReset }: Re
                   onDragOver={handleDragOver}
                   onDragLeave={handleDragLeave}
                   onDrop={handleDrop}
+                  colorMode={colorMode}
+                  requestColorMap={requestColorMap}
+                  clientColorMap={clientColorMap}
                 />
               );
             })}
