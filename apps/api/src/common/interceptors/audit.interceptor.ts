@@ -49,17 +49,17 @@ export class AuditInterceptor implements NestInterceptor {
     const requestBody = request.body;
     const requestParams = request.params;
 
-    // For DELETE operations, fetch entity before deletion to capture its name
-    const preDeletePromise =
-      method === 'DELETE' && requestParams?.id
-        ? this.fetchEntityBeforeDelete(
+    // For DELETE and UPDATE operations, fetch entity before mutation to capture its previous state
+    const preMutationPromise =
+      ['DELETE', 'PUT', 'PATCH'].includes(method) && requestParams?.id
+        ? this.fetchEntityBeforeMutation(
             auditOptions?.entity || this.getEntityFromPath(request.path),
             requestParams.id,
           )
         : Promise.resolve(null);
 
-    return from(preDeletePromise).pipe(
-      switchMap((preDeleteEntity) => next.handle().pipe(
+    return from(preMutationPromise).pipe(
+      switchMap((preMutationEntity) => next.handle().pipe(
       tap({
         next: async (responseData) => {
           try {
@@ -68,7 +68,7 @@ export class AuditInterceptor implements NestInterceptor {
             const entityId = requestParams?.id || (responseData as Record<string, unknown>)?.id;
 
             const entityName = this.extractEntityName(
-              method === 'DELETE' ? preDeleteEntity : responseData,
+              method === 'DELETE' ? preMutationEntity : responseData,
               entity,
             );
 
@@ -78,8 +78,8 @@ export class AuditInterceptor implements NestInterceptor {
                 action,
                 entity,
                 entityId,
-                oldValue: method === 'DELETE' && preDeleteEntity
-                  ? this.sanitizeData(preDeleteEntity) as object
+                oldValue: preMutationEntity
+                  ? this.sanitizeData(preMutationEntity) as object
                   : undefined,
                 newValue: this.sanitizeData(responseData) as object,
                 ipAddress: this.getClientIp(request),
@@ -136,7 +136,7 @@ export class AuditInterceptor implements NestInterceptor {
     )));
   }
 
-  private async fetchEntityBeforeDelete(
+  private async fetchEntityBeforeMutation(
     entity: string,
     entityId: string,
   ): Promise<Record<string, unknown> | null> {

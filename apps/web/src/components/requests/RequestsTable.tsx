@@ -154,7 +154,7 @@ export function RequestsTable({ onNewRequest }: Readonly<RequestsTableProps>) {
     requester: true,
     createdAt: true,
   });
-  const [sortBy, setSortBy] = useState<ColumnId | null>(null);
+  const [sortBy, setSortBy] = useState<ColumnId | null>('status');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [editRequestId, setEditRequestId] = useState<string | null>(null);

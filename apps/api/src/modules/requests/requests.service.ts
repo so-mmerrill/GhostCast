@@ -144,11 +144,14 @@ export class RequestsService {
 
     this.applyStatusFilter(where, query);
 
-    let orderBy: Record<string, unknown> = { createdAt: 'desc' };
+    let orderBy: Record<string, unknown>[] = [{ status: 'asc' }, { createdAt: 'desc' }];
     if (sortBy) {
-      orderBy = sortBy === 'requester'
+      const primarySort = sortBy === 'requester'
         ? { requester: { firstName: sortOrder } }
         : { [sortBy]: sortOrder };
+      orderBy = sortBy === 'createdAt'
+        ? [primarySort]
+        : [primarySort, { createdAt: 'desc' as const }];
     }
 
     const [requests, total] = await Promise.all([

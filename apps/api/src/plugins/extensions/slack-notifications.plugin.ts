@@ -298,13 +298,25 @@ export class SlackNotificationsPlugin extends BasePlugin {
 
     if (!entityData) return null;
 
-    // Extract members based on entity type
-    const members = this.extractMembers(entityData, auditLog.entity);
-    if (members) {
-      fields.push({
-        type: 'mrkdwn',
-        text: `*Members:*\n${members}`,
-      });
+    // For UPDATE actions with oldValue, show member diff
+    if (auditLog.action === 'UPDATE' && auditLog.oldValue) {
+      const oldData = auditLog.oldValue as Record<string, unknown>;
+      const membersDiff = this.formatMembersDiff(oldData, entityData, auditLog.entity);
+      if (membersDiff) {
+        fields.push({
+          type: 'mrkdwn',
+          text: `*Members:*\n${membersDiff}`,
+        });
+      }
+    } else {
+      // Extract members based on entity type
+      const members = this.extractMembers(entityData, auditLog.entity);
+      if (members) {
+        fields.push({
+          type: 'mrkdwn',
+          text: `*Members:*\n${members}`,
+        });
+      }
     }
 
     // Extract dates based on entity type
@@ -319,7 +331,7 @@ export class SlackNotificationsPlugin extends BasePlugin {
     return fields.length > 0 ? fields : null;
   }
 
-  private extractMembers(data: Record<string, unknown>, entity: string): string | null {
+  private extractMemberNames(data: Record<string, unknown>, entity: string): string[] | null {
     let membersList: Array<Record<string, unknown>> | null = null;
 
     // Assignment uses 'members', Request uses 'requiredMembers'
@@ -341,10 +353,59 @@ export class SlackNotificationsPlugin extends BasePlugin {
         }
         return null;
       })
-      .filter(Boolean);
+      .filter((n): n is string => n !== null);
 
-    if (names.length === 0) return null;
-    return names.join(', ');
+    return names.length > 0 ? names : null;
+  }
+
+  private extractMembers(data: Record<string, unknown>, entity: string): string | null {
+    const names = this.extractMemberNames(data, entity);
+    return names ? names.join(', ') : null;
+  }
+
+  private formatMembersDiff(
+    oldData: Record<string, unknown>,
+    newData: Record<string, unknown>,
+    entity: string,
+  ): string | null {
+    const oldMembers = this.extractMemberNames(oldData, entity);
+    const newMembers = this.extractMemberNames(newData, entity);
+
+    if (!oldMembers && !newMembers) return null;
+
+    const oldSet = new Set(oldMembers || []);
+    const newSet = new Set(newMembers || []);
+
+    // If identical, no diff needed
+    if (oldSet.size === newSet.size && [...oldSet].every((m) => newSet.has(m))) {
+      return (newMembers || []).join(', ') || null;
+    }
+
+    const removed = [...oldSet].filter((m) => !newSet.has(m));
+    const added = [...newSet].filter((m) => !oldSet.has(m));
+    const kept = [...newSet].filter((m) => oldSet.has(m));
+
+    const lines: string[] = [];
+
+    // Pair removed/added members positionally
+    const pairCount = Math.min(removed.length, added.length);
+    for (let i = 0; i < pairCount; i++) {
+      lines.push(`${removed[i]} --> ${added[i]}`);
+    }
+    // Extra removals
+    for (let i = pairCount; i < removed.length; i++) {
+      lines.push(`~${removed[i]}~ (removed)`);
+    }
+    // Extra additions
+    for (let i = pairCount; i < added.length; i++) {
+      lines.push(`${added[i]} (added)`);
+    }
+    // Note unchanged members if there were changes
+    if (kept.length > 0 && lines.length > 0) {
+      lines.push(`_Unchanged: ${kept.join(', ')}_`);
+    }
+
+    return lines.join('\n');
   }
 
   private extractDates(data: Record<string, unknown>, entity: string): string | null {
