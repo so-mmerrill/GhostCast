@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
+import { usePaginatedSearch } from '@/hooks/use-paginated-search';
 import { TIMEZONES, formatTimezone, timezoneMatchesSearch } from '@/lib/timezones';
 import { RequestStatus } from '@ghostcast/shared';
 import type { QuipParsedRequestFields } from '@ghostcast/shared';
@@ -280,7 +281,7 @@ interface SkillSelectorProps {
   skillSearch: string;
   onSkillSearchChange: (value: string) => void;
   onRemoveSkill: (skillId: string, e: React.MouseEvent) => void;
-  onToggleSkill: (skillId: string, isSelected: boolean) => void;
+  onToggleSkill: (skill: Skill, isSelected: boolean) => void;
 }
 
 function SkillSelector({
@@ -332,7 +333,7 @@ function SkillSelector({
           </Button>
         </PopoverTrigger>
         <PopoverContent className="w-[350px] p-0" align="start">
-          <Command>
+          <Command shouldFilter={false}>
             <CommandInput
               placeholder="Search skills..."
               value={skillSearch}
@@ -347,7 +348,7 @@ function SkillSelector({
                     <CommandItem
                       key={skill.id}
                       value={skill.name}
-                      onSelect={() => onToggleSkill(skill.id, isSelected)}
+                      onSelect={() => onToggleSkill(skill, isSelected)}
                     >
                       <div className="flex items-center gap-2 flex-1">
                         <div
@@ -415,6 +416,8 @@ export function EditRequestModal({
   const [travelLocation, setTravelLocation] = useState('');
   const [selectedMemberIds, setSelectedMemberIds] = useState<string[]>([]);
   const [selectedMemberObjects, setSelectedMemberObjects] = useState<Member[]>([]);
+  const [selectedSkillObjects, setSelectedSkillObjects] = useState<Skill[]>([]);
+  const [selectedProjectTypeObj, setSelectedProjectTypeObj] = useState<ProjectType | null>(null);
   const [requiredMemberCount, setRequiredMemberCount] = useState('0');
   const [memberSelectionMode, setMemberSelectionMode] = useState<'count' | 'specific'>('count');
 
@@ -427,10 +430,7 @@ export function EditRequestModal({
   const [timezoneOpen, setTimezoneOpen] = useState(false);
   const [skillsOpen, setSkillsOpen] = useState(false);
   const [membersOpen, setMembersOpen] = useState(false);
-  const [projectTypeSearch, setProjectTypeSearch] = useState('');
   const [timezoneSearch, setTimezoneSearch] = useState('');
-  const [skillSearch, setSkillSearch] = useState('');
-  const [memberSearch, setMemberSearch] = useState('');
 
   // QUIP import state
   const [quipBrowserOpen, setQuipBrowserOpen] = useState(false);
@@ -456,26 +456,42 @@ export function EditRequestModal({
 
   const requestData = requestResponse?.data;
 
-  // Fetch project types
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: projectTypesResponse } = useQuery<any>({
-    queryKey: ['project-types'],
-    queryFn: () => api.get('/project-types', { pageSize: '1000' }),
+  // Server-side paginated search for project types
+  const {
+    items: projectTypesRaw,
+    search: projectTypeSearch,
+    setSearch: setProjectTypeSearch,
+  } = usePaginatedSearch<ProjectType>({
+    endpoint: '/project-types',
+    queryKey: 'project-types-search',
+    pageSize: 50,
   });
+  const projectTypes = projectTypesRaw.filter((pt) => pt.isActive);
 
-  // Fetch all members for client-side search
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: membersResponse } = useQuery<any>({
-    queryKey: ['members-all'],
-    queryFn: () => api.get('/members', { pageSize: '1000' }),
+  // Server-side paginated search for members
+  const {
+    items: membersRaw,
+    search: memberSearch,
+    setSearch: setMemberSearch,
+  } = usePaginatedSearch<Member>({
+    endpoint: '/members',
+    queryKey: 'members-search',
+    pageSize: 50,
+    extraParams: { memberStatus: 'active' },
   });
+  const members = membersRaw.filter((m) => m.isActive);
 
-  // Fetch all skills for client-side search
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: skillsResponse } = useQuery<any>({
-    queryKey: ['skills-all'],
-    queryFn: () => api.get('/skills', { pageSize: '1000' }),
+  // Server-side paginated search for skills
+  const {
+    items: skillsRaw,
+    search: skillSearch,
+    setSearch: setSkillSearch,
+  } = usePaginatedSearch<Skill>({
+    endpoint: '/skills',
+    queryKey: 'skills-search',
+    pageSize: 50,
   });
+  const skills = skillsRaw.filter((s) => s.isActive);
 
   // Populate form when request data is loaded
   useEffect(() => {
@@ -513,77 +529,28 @@ export function EditRequestModal({
       setSelectedMemberIds(memberIds);
       setSelectedMemberObjects(memberObjs);
       setRequiredMemberCount(String(requestData.requiredMemberCount || 0));
-      // Determine member selection mode based on existing data
       setMemberSelectionMode(memberIds.length > 0 ? 'specific' : 'count');
       setSelectedSkillIds(requestData.requiredSkills?.map((rs) => rs.skillId) || []);
+      setSelectedSkillObjects(requestData.requiredSkills?.map((rs) => rs.skill) || []);
+      // Track the project type object from the request's included relation
+      const ptFromRequest = (requestData as unknown as Record<string, unknown>).projectType as ProjectType | null;
+      if (ptFromRequest) setSelectedProjectTypeObj(ptFromRequest);
     }
   }, [requestData]);
 
-  // Handle multiple possible response structures
-  const getProjectTypesArray = (): ProjectType[] => {
-    if (!projectTypesResponse) return [];
-    if (Array.isArray(projectTypesResponse.data)) return projectTypesResponse.data;
-    if (projectTypesResponse.data?.data && Array.isArray(projectTypesResponse.data.data)) {
-      return projectTypesResponse.data.data;
-    }
-    if (Array.isArray(projectTypesResponse)) return projectTypesResponse;
-    return [];
-  };
-  const projectTypes = getProjectTypesArray().filter((pt: ProjectType) => pt.isActive);
-
-  const getMembersArray = (): Member[] => {
-    if (!membersResponse) return [];
-    if (Array.isArray(membersResponse.data)) return membersResponse.data;
-    if (membersResponse.data?.data && Array.isArray(membersResponse.data.data)) {
-      return membersResponse.data.data;
-    }
-    if (Array.isArray(membersResponse)) return membersResponse;
-    return [];
-  };
-  const members = getMembersArray().filter((m: Member) => m.isActive);
-
-  const getSkillsArray = (): Skill[] => {
-    if (!skillsResponse) return [];
-    if (Array.isArray(skillsResponse.data)) return skillsResponse.data;
-    if (skillsResponse.data?.data && Array.isArray(skillsResponse.data.data)) {
-      return skillsResponse.data.data;
-    }
-    if (Array.isArray(skillsResponse)) return skillsResponse;
-    return [];
-  };
-  const skills = getSkillsArray().filter((s: Skill) => s.isActive);
-
-  // Filtered options
-  const filteredProjectTypes = useMemo(() => {
-    if (!projectTypeSearch) return projectTypes;
-    return projectTypes.filter((pt) =>
-      pt.name.toLowerCase().includes(projectTypeSearch.toLowerCase())
-    );
-  }, [projectTypes, projectTypeSearch]);
+  // Use server-side search results directly
+  const filteredProjectTypes = projectTypes;
 
   const filteredTimezones = useMemo(() => {
     if (!timezoneSearch) return TIMEZONES.slice(0, 50);
     return TIMEZONES.filter((tz) => timezoneMatchesSearch(tz, timezoneSearch)).slice(0, 50);
   }, [timezoneSearch]);
 
-  const filteredSkills = useMemo(() => {
-    if (!skillSearch) return skills;
-    return skills.filter((s) =>
-      s.name.toLowerCase().includes(skillSearch.toLowerCase())
-    );
-  }, [skills, skillSearch]);
+  const filteredSkills = skills;
+  const filteredMembers = members;
 
-  const filteredMembers = useMemo(() => {
-    if (!memberSearch) return members;
-    const search = memberSearch.toLowerCase();
-    return members.filter((m) =>
-      `${m.firstName} ${m.lastName}`.toLowerCase().includes(search) ||
-      m.email?.toLowerCase().includes(search)
-    );
-  }, [members, memberSearch]);
-
-  const selectedProjectType = projectTypes.find((pt) => pt.id === projectTypeId);
-  const selectedSkills = skills.filter((s) => selectedSkillIds.includes(s.id));
+  const selectedProjectType = selectedProjectTypeObj ?? projectTypes.find((pt) => pt.id === projectTypeId);
+  const selectedSkills = selectedSkillObjects;
 
   // Helper functions for field visibility and required status
   const getFieldConfig = (fieldName: string): FieldSettings => {
@@ -667,6 +634,8 @@ export function EditRequestModal({
     setTravelLocation('');
     setSelectedMemberIds([]);
     setSelectedMemberObjects([]);
+    setSelectedSkillObjects([]);
+    setSelectedProjectTypeObj(null);
     setRequiredMemberCount('0');
     setMemberSelectionMode('count');
     setAdditionalDetailsOpen(false);
@@ -701,17 +670,22 @@ export function EditRequestModal({
   // Helper: Resolve skill names to IDs
   const resolveSkillNames = (skillNames: string[] | undefined) => {
     if (!skillNames || skillNames.length === 0) return;
-    const matchedIds = skills
-      .filter((s) => skillNames.some((name) => s.name.toLowerCase() === name.toLowerCase()))
-      .map((s) => s.id);
-    if (matchedIds.length > 0) setSelectedSkillIds(matchedIds);
+    const matched = skills
+      .filter((s) => skillNames.some((name) => s.name.toLowerCase() === name.toLowerCase()));
+    if (matched.length > 0) {
+      setSelectedSkillIds(matched.map((s) => s.id));
+      setSelectedSkillObjects(matched);
+    }
   };
 
   // Helper: Resolve project type name to ID
   const resolveProjectTypeName = (typeName: string | undefined) => {
     if (!typeName) return;
     const matchedType = projectTypes.find((pt) => pt.name.toLowerCase() === typeName.toLowerCase());
-    if (matchedType) setProjectTypeId(matchedType.id);
+    if (matchedType) {
+      setProjectTypeId(matchedType.id);
+      setSelectedProjectTypeObj(matchedType);
+    }
   };
 
   const handleQuipImport = (fields: QuipParsedRequestFields) => {
@@ -767,12 +741,17 @@ export function EditRequestModal({
   const handleRemoveSkill = useCallback((skillId: string, e: React.MouseEvent) => {
     e.stopPropagation();
     setSelectedSkillIds((prev) => prev.filter((id) => id !== skillId));
+    setSelectedSkillObjects((prev) => prev.filter((s) => s.id !== skillId));
   }, []);
 
-  const handleToggleSkill = useCallback((skillId: string, isSelected: boolean) => {
-    setSelectedSkillIds((prev) =>
-      isSelected ? prev.filter((id) => id !== skillId) : [...prev, skillId]
-    );
+  const handleToggleSkill = useCallback((skill: Skill, isSelected: boolean) => {
+    if (isSelected) {
+      setSelectedSkillIds((prev) => prev.filter((id) => id !== skill.id));
+      setSelectedSkillObjects((prev) => prev.filter((s) => s.id !== skill.id));
+    } else {
+      setSelectedSkillIds((prev) => [...prev, skill.id]);
+      setSelectedSkillObjects((prev) => [...prev, skill]);
+    }
   }, []);
 
   const handleToggleMemberMode = useCallback(() => {
@@ -962,7 +941,7 @@ export function EditRequestModal({
                       </Button>
                     </PopoverTrigger>
                     <PopoverContent className="w-[300px] p-0" align="start">
-                      <Command>
+                      <Command shouldFilter={false}>
                         <CommandInput
                           placeholder="Search project types..."
                           value={projectTypeSearch}
@@ -977,6 +956,7 @@ export function EditRequestModal({
                                 value={pt.name}
                                 onSelect={() => {
                                   setProjectTypeId(pt.id);
+                                  setSelectedProjectTypeObj(pt);
                                   setProjectTypeOpen(false);
                                   setProjectTypeSearch('');
                                 }}

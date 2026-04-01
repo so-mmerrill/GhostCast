@@ -1,17 +1,13 @@
 import { useState, forwardRef, useImperativeHandle, useEffect } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { api } from '@/lib/api';
+import { usePaginatedSearch } from '@/hooks/use-paginated-search';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { Mail, Phone, Building2, User, Users, CalendarOff } from 'lucide-react';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
+import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
+import { Mail, Phone, Building2, User, Users, CalendarOff, ChevronsUpDown, Check } from 'lucide-react';
 
 interface Member {
   id: string;
@@ -86,22 +82,39 @@ export const MemberInfoTab = forwardRef<MemberInfoTabRef, MemberInfoTabProps>(
       }),
     }));
 
-    // Fetch active members for manager dropdown
-    const { data: membersData } = useQuery({
-      queryKey: ['members', 'active-list'],
-      queryFn: async () => {
-        const response = await api.get<{ data: { data: Member[] } }>('/members?pageSize=1000');
-        return response.data.data;
-      },
+    const [managerOpen, setManagerOpen] = useState(false);
+
+    // Server-side paginated search for manager dropdown
+    const {
+      items: managersRaw,
+      search: managerSearch,
+      setSearch: setManagerSearch,
+    } = usePaginatedSearch<Member & { isActive?: boolean }>({
+      endpoint: '/members',
+      queryKey: 'members-manager-search',
+      pageSize: 50,
+      extraParams: { memberStatus: 'active' },
+      enabled: isEditing,
     });
 
-    const availableManagers = membersData?.filter((m) => m.id !== member.id) || [];
+    const availableManagers = managersRaw.filter((m) => m.id !== member.id);
 
-    // Ensure current manager is always in the list (even if data hasn't loaded yet)
+    // Ensure current manager is always in the list (even if not in paginated results)
     const currentManagerInList = member.managerId && availableManagers.some((m) => m.id === member.managerId);
     const managersWithCurrent = currentManagerInList || !member.manager
       ? availableManagers
-      : [{ id: member.manager.id, firstName: member.manager.firstName, lastName: member.manager.lastName }, ...availableManagers];
+      : [{ id: member.manager.id, firstName: member.manager.firstName, lastName: member.manager.lastName } as Member, ...availableManagers];
+
+    // Find display name for currently selected manager
+    const selectedManagerName = (() => {
+      if (!formData.managerId) return null;
+      const found = managersWithCurrent.find((m) => m.id === formData.managerId);
+      if (found) return `${found.firstName} ${found.lastName}`;
+      if (member.manager && member.manager.id === formData.managerId) {
+        return `${member.manager.firstName} ${member.manager.lastName}`;
+      }
+      return null;
+    })();
 
     return (
       <div className="space-y-4 p-4">
@@ -217,22 +230,56 @@ export const MemberInfoTab = forwardRef<MemberInfoTabRef, MemberInfoTabProps>(
               Manager
             </Label>
             {isEditing ? (
-              <Select
-                value={formData.managerId}
-                onValueChange={(value) => setFormData((prev) => ({ ...prev, managerId: value === 'none' ? '' : value }))}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select manager" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">None</SelectItem>
-                  {managersWithCurrent.map((m) => (
-                    <SelectItem key={m.id} value={m.id}>
-                      {m.firstName} {m.lastName}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Popover open={managerOpen} onOpenChange={setManagerOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    role="combobox"
+                    aria-expanded={managerOpen}
+                    className="w-full justify-between font-normal"
+                  >
+                    {selectedManagerName ?? 'Select manager...'}
+                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[250px] p-0" align="start">
+                  <Command shouldFilter={false}>
+                    <CommandInput
+                      placeholder="Search members..."
+                      value={managerSearch}
+                      onValueChange={setManagerSearch}
+                    />
+                    <CommandList>
+                      <CommandEmpty>No member found.</CommandEmpty>
+                      <CommandGroup>
+                        <CommandItem
+                          value="none"
+                          onSelect={() => {
+                            setFormData((prev) => ({ ...prev, managerId: '' }));
+                            setManagerOpen(false);
+                          }}
+                        >
+                          <Check className={cn('mr-2 h-4 w-4', !formData.managerId ? 'opacity-100' : 'opacity-0')} />
+                          None
+                        </CommandItem>
+                        {managersWithCurrent.map((m) => (
+                          <CommandItem
+                            key={m.id}
+                            value={m.id}
+                            onSelect={() => {
+                              setFormData((prev) => ({ ...prev, managerId: m.id }));
+                              setManagerOpen(false);
+                            }}
+                          >
+                            <Check className={cn('mr-2 h-4 w-4', formData.managerId === m.id ? 'opacity-100' : 'opacity-0')} />
+                            {m.firstName} {m.lastName}
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
             ) : (
               <p className="text-sm py-2">
                 {member.manager

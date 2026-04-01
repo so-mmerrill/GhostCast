@@ -5,6 +5,7 @@ import { api } from '@/lib/api';
 import { useAuth } from '@/features/auth/AuthProvider';
 import { useToast } from '@/hooks/use-toast';
 import { Role } from '@ghostcast/shared';
+import { upsertMemberInCache, removeMemberFromCache, type CalendarMember } from '@/lib/schedule-cache';
 import { Hash, Trash2, Pencil, Save, X } from 'lucide-react';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
@@ -140,9 +141,10 @@ export function MemberProfileModal({
       onMemberDeleted?.();
       // Remove the deleted member from cache (don't refetch)
       queryClient.removeQueries({ queryKey: ['member', deletedMemberId] });
+      // Remove from schedule caches directly (no full refetch)
+      removeMemberFromCache(queryClient, deletedMemberId);
       // Then invalidate list queries to refetch updated data
       queryClient.invalidateQueries({ queryKey: ['members'] });
-      queryClient.invalidateQueries({ queryKey: ['schedule'] });
     } catch (error) {
       toast({
         title: 'Failed to delete member',
@@ -166,12 +168,14 @@ export function MemberProfileModal({
       const profileData = profileTabRef.current?.getData() || pendingEdits.profile || {};
       const notesData = notesTabRef.current?.getData() || pendingEdits.notes || {};
 
-      await api.put(`/members/${member.id}`, {
+      const response = await api.put<{ data: CalendarMember }>(`/members/${member.id}`, {
         ...infoData,
         ...profileData,
         ...notesData,
       });
 
+      // Upsert the updated member directly into schedule caches (no full refetch)
+      upsertMemberInCache(queryClient, response.data);
       // Invalidate both the list and single-member queries
       queryClient.invalidateQueries({ queryKey: ['members'] });
       queryClient.invalidateQueries({ queryKey: ['member', member.id] });

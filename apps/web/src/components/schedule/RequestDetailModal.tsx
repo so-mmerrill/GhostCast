@@ -6,6 +6,7 @@ import {
   Clock,
   Building2,
   MapPin,
+  User,
   Users,
   ExternalLink,
   Clock4,
@@ -91,6 +92,7 @@ interface RequestData {
   urlLink?: string | null;
   location?: string | null;
   format?: string | null;
+  requester?: { id: string; firstName: string; lastName: string } | null;
   assignments?: Assignment[];
   createdAt: string;
   updatedAt: string;
@@ -501,6 +503,12 @@ export function RequestDetailModal({
             <div className="py-4 border-b shrink-0 space-y-3">
               {/* Key Details Row */}
               <div className="flex flex-wrap gap-x-6 gap-y-2 text-sm">
+                {requestData.requester && (
+                  <div className="flex items-center gap-2">
+                    <User className="h-4 w-4 text-muted-foreground" />
+                    <span>{requestData.requester.firstName} {requestData.requester.lastName}</span>
+                  </div>
+                )}
                 {isFieldVisible('clientName') && requestData.clientName && (
                   <div className="flex items-center gap-2">
                     <Building2 className="h-4 w-4 text-muted-foreground" />

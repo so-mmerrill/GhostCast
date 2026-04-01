@@ -230,6 +230,9 @@ function SchedulePage() {
                         <div className="flex justify-between"><span className="text-muted-foreground">Delete</span><kbd className="rounded bg-muted px-1.5 py-0.5 font-mono">Del</kbd></div>
                         <div className="flex justify-between"><span className="text-muted-foreground">Move cell</span><kbd className="rounded bg-muted px-1.5 py-0.5 font-mono">Arrows</kbd></div>
                         <div className="flex justify-between"><span className="text-muted-foreground">Extend selection</span><kbd className="rounded bg-muted px-1.5 py-0.5 font-mono">Shift+←→</kbd></div>
+                        <div className="flex justify-between"><span className="text-muted-foreground">Scheduled</span><kbd className="rounded bg-muted px-1.5 py-0.5 font-mono">Alt+1</kbd></div>
+                        <div className="flex justify-between"><span className="text-muted-foreground">Forecast</span><kbd className="rounded bg-muted px-1.5 py-0.5 font-mono">Alt+2</kbd></div>
+                        <div className="flex justify-between"><span className="text-muted-foreground">Unscheduled</span><kbd className="rounded bg-muted px-1.5 py-0.5 font-mono">Alt+3</kbd></div>
                         <div className="flex justify-between"><span className="text-muted-foreground">Zoom in</span><kbd className="rounded bg-muted px-1.5 py-0.5 font-mono">Ctrl++</kbd></div>
                         <div className="flex justify-between"><span className="text-muted-foreground">Zoom out</span><kbd className="rounded bg-muted px-1.5 py-0.5 font-mono">Ctrl+-</kbd></div>
                         <div className="flex justify-between"><span className="text-muted-foreground">Reset zoom</span><kbd className="rounded bg-muted px-1.5 py-0.5 font-mono">Ctrl+0</kbd></div>
@@ -298,6 +301,9 @@ function SchedulePage() {
                       <div className="flex justify-between"><span className="text-muted-foreground">Delete</span><kbd className="rounded bg-muted px-1.5 py-0.5 font-mono">Del</kbd></div>
                       <div className="flex justify-between"><span className="text-muted-foreground">Move cell</span><kbd className="rounded bg-muted px-1.5 py-0.5 font-mono">Arrows</kbd></div>
                       <div className="flex justify-between"><span className="text-muted-foreground">Extend selection</span><kbd className="rounded bg-muted px-1.5 py-0.5 font-mono">Shift+←→</kbd></div>
+                      <div className="flex justify-between"><span className="text-muted-foreground">Scheduled</span><kbd className="rounded bg-muted px-1.5 py-0.5 font-mono">Alt+1</kbd></div>
+                      <div className="flex justify-between"><span className="text-muted-foreground">Forecast</span><kbd className="rounded bg-muted px-1.5 py-0.5 font-mono">Alt+2</kbd></div>
+                      <div className="flex justify-between"><span className="text-muted-foreground">Unscheduled</span><kbd className="rounded bg-muted px-1.5 py-0.5 font-mono">Alt+3</kbd></div>
                       <div className="flex justify-between"><span className="text-muted-foreground">Zoom in</span><kbd className="rounded bg-muted px-1.5 py-0.5 font-mono">Ctrl++</kbd></div>
                       <div className="flex justify-between"><span className="text-muted-foreground">Zoom out</span><kbd className="rounded bg-muted px-1.5 py-0.5 font-mono">Ctrl+-</kbd></div>
                       <div className="flex justify-between"><span className="text-muted-foreground">Reset zoom</span><kbd className="rounded bg-muted px-1.5 py-0.5 font-mono">Ctrl+0</kbd></div>

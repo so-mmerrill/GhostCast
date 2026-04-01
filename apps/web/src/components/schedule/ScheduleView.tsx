@@ -34,10 +34,10 @@ import { useCellPresence } from '@/hooks/use-cell-presence';
 import { useScheduleUndoRedo } from '@/hooks/use-schedule-undo-redo';
 import { useUndoRedoStore } from '@/stores/undo-redo-store';
 import { useScheduleViewStore } from '@/stores/schedule-view-store';
-import { CellSelection, AssignmentSelection, AssignmentStatus, Role, generateRequestColors, generateClientColors } from '@ghostcast/shared';
+import { CellSelection, AssignmentSelection, AssignmentStatus, RequestStatus, Role, generateRequestColors, generateClientColors } from '@ghostcast/shared';
 import type { ColorMode } from '@/stores/schedule-view-store';
 import { useAuth } from '@/features/auth/AuthProvider';
-import { refreshScheduleCache, findAssignmentDatesInCache, removeAssignmentFromCache } from '@/lib/schedule-cache';
+import { refreshScheduleCache, findAssignmentDatesInCache, findAssignmentMemberIdsInCache, removeAssignmentFromCache, updateRequestStatusInCache, updateRequestStatusInPaginatedCache } from '@/lib/schedule-cache';
 
 interface Member {
   id: string;
@@ -474,7 +474,7 @@ const MemberRow = memo(function MemberRow({
     // eslint-disable-next-line jsx-a11y/no-static-element-interactions
     <div
       className={cn(
-        'relative border-b border-border',
+        'relative border-b border-foreground/20',
         isDropTarget && 'bg-primary/10 ring-2 ring-primary/50 ring-inset'
       )}
       style={{
@@ -507,7 +507,7 @@ const MemberRow = memo(function MemberRow({
         if (isMonthStart) {
           boxShadow = 'inset 2px 0 0 0 hsl(var(--foreground))';
         } else if (isWeekStart) {
-          boxShadow = 'inset 2px 0 0 0 hsl(var(--border))';
+          boxShadow = 'inset 2px 0 0 0 hsl(var(--foreground) / 0.3)';
         }
 
         const cellKey = `${memberId}-${dayKey}`;
@@ -528,7 +528,7 @@ const MemberRow = memo(function MemberRow({
             key={cellKey}
             data-day-index={index}
             className={cn(
-              'absolute flex flex-col cursor-pointer border-b border-r border-border transition-all select-none focus:outline-none',
+              'absolute flex flex-col cursor-pointer border-b border-r border-foreground/20 transition-all select-none focus:outline-none',
               isToday(day) && !isSelected && 'bg-primary/5',
               isSelected && 'bg-primary/20'
             )}
@@ -879,17 +879,22 @@ export function ScheduleView({ zoomLevel, onZoomIn, onZoomOut, onZoomReset }: Re
       api.put(`/assignments/${id}`, data),
     onMutate: ({ id, data }) => {
       const oldDates = findAssignmentDatesInCache(queryClient, id);
+      const oldMemberIds = findAssignmentMemberIdsInCache(queryClient, id);
       const newDates = (data.startDate && data.endDate)
         ? { startDate: data.startDate, endDate: data.endDate }
         : null;
-      return { oldDates, newDates };
+      return { oldDates, newDates, oldMemberIds, newMemberIds: data.memberIds };
     },
     onSuccess: (_data, _vars, context) => {
       const ranges: Array<{ startDate: string; endDate: string }> = [];
       if (context?.oldDates) ranges.push(context.oldDates);
       if (context?.newDates) ranges.push(context.newDates);
+      const affectedMemberIds = [...new Set([
+        ...(context?.oldMemberIds || []),
+        ...(context?.newMemberIds || []),
+      ])];
       if (ranges.length > 0) {
-        refreshScheduleCache(queryClient, ranges);
+        refreshScheduleCache(queryClient, ranges, affectedMemberIds.length > 0 ? affectedMemberIds : undefined);
       } else {
         queryClient.invalidateQueries({ queryKey: ['schedule'] });
       }
@@ -917,7 +922,7 @@ export function ScheduleView({ zoomLevel, onZoomIn, onZoomOut, onZoomReset }: Re
       projectRoleIds?: string[];
     }) => api.post('/assignments', data),
     onSuccess: (_data, variables) => {
-      refreshScheduleCache(queryClient, [{ startDate: variables.startDate, endDate: variables.endDate }]);
+      refreshScheduleCache(queryClient, [{ startDate: variables.startDate, endDate: variables.endDate }], variables.memberIds);
       queryClient.invalidateQueries({ queryKey: ['requests-for-schedule'] });
       queryClient.invalidateQueries({ queryKey: ['request'] });
     },
@@ -955,6 +960,24 @@ export function ScheduleView({ zoomLevel, onZoomIn, onZoomOut, onZoomReset }: Re
     },
   });
 
+  // Mutation for updating request status from keyboard shortcut
+  const updateRequestStatusMutation = useMutation({
+    mutationFn: ({ requestId, status }: { requestId: string; status: RequestStatus }) =>
+      api.put(`/requests/${requestId}`, { status }),
+    onSuccess: (_data, variables) => {
+      // Update only linked assignments in the schedule cache (no full calendar refetch)
+      updateRequestStatusInCache(queryClient, variables.requestId, variables.status);
+      // Update selected assignment state so the UI reflects immediately
+      if (selectedAssignment?.requestId === variables.requestId && selectedAssignment?.request) {
+        setSelectedAssignment({
+          ...selectedAssignment,
+          request: { ...selectedAssignment.request, status: variables.status },
+        });
+      }
+      // Update request status directly in paginated caches (no network requests)
+      updateRequestStatusInPaginatedCache(queryClient, variables.requestId, variables.status);
+    },
+  });
 
   // Handle click on assignment to select it
   const handleAssignmentClick = useCallback(
@@ -1713,19 +1736,32 @@ export function ScheduleView({ zoomLevel, onZoomIn, onZoomOut, onZoomReset }: Re
   );
 
   // Paste handler - paste clipboard assignment to selected cell's week/member
+  // If an assignment is selected, deletes it and pastes in its place
+  // Automatically overwrites other conflicting assignments without prompting
   const handlePaste = useCallback(async () => {
-    if (!clipboardAssignment || !clipboardSourceMemberId || !selectedMemberForDrag) return;
-    if (selectedDays.size === 0) return;
+    if (!clipboardAssignment || !clipboardSourceMemberId) return;
 
-    // Store target member info before async operations
-    const targetMemberId = selectedMemberForDrag;
+    // Determine target from either a selected assignment or selected cells
+    let targetMemberId: string;
+    let targetWeekMonday: Date;
+    let assignmentToReplace: Assignment | null = null;
 
-    // Get target week from first selected cell
-    const selectedDaysSorted = Array.from(selectedDays)
-      .map(d => parseLocalDate(d))
-      .sort((a, b) => a.getTime() - b.getTime());
-    const targetDate = selectedDaysSorted[0];
-    const targetWeekMonday = startOfWeek(targetDate, { weekStartsOn: 1 });
+    if (selectedAssignment && selectedAssignmentMemberId) {
+      // Paste onto a selected assignment: replace it
+      targetMemberId = selectedAssignmentMemberId;
+      targetWeekMonday = startOfWeek(parseLocalDate(selectedAssignment.startDate), { weekStartsOn: 1 });
+      assignmentToReplace = selectedAssignment;
+    } else if (selectedMemberForDrag && selectedDays.size > 0) {
+      // Paste onto selected cells
+      targetMemberId = selectedMemberForDrag;
+      const selectedDaysSorted = Array.from(selectedDays)
+        .map(d => parseLocalDate(d))
+        .sort((a, b) => a.getTime() - b.getTime());
+      const targetDate = selectedDaysSorted[0];
+      targetWeekMonday = startOfWeek(targetDate, { weekStartsOn: 1 });
+    } else {
+      return;
+    }
 
     // Calculate original assignment's position within its week
     const originalStart = parseLocalDate(clipboardAssignment.startDate);
@@ -1748,9 +1784,32 @@ export function ScheduleView({ zoomLevel, onZoomIn, onZoomOut, onZoomReset }: Re
       return data?.data.members.find((m) => m.id === targetMemberId);
     };
 
+    // Delete the selected assignment being replaced, plus any other conflicts
+    const pastedAssignment = { ...clipboardAssignment, startDate: newStartDate, endDate: newEndDate };
+    const conflictInfo = detectConflicts(pastedAssignment, targetMemberId);
+    const assignmentsToDelete = [
+      ...(assignmentToReplace ? [assignmentToReplace] : []),
+      ...(conflictInfo.hasConflict
+        ? conflictInfo.conflictingAssignments.filter((a) => a.id !== assignmentToReplace?.id)
+        : []),
+    ];
+    if (assignmentsToDelete.length > 0) {
+      try {
+        await Promise.all(
+          assignmentsToDelete.map((a) => {
+            recordDeletion(a);
+            return deleteAssignmentMutation.mutateAsync(a.id);
+          })
+        );
+      } catch {
+        // Error handled by mutation
+        return;
+      }
+    }
+
     if (clipboardMode === 'cut') {
-      // Move: Use existing assignment drop logic (recordUpdate is called inside)
-      handleAssignmentDropWithDates(
+      // Move: reassign the assignment directly (recordUpdate is called inside)
+      executeReassignmentWithDates(
         clipboardAssignment,
         clipboardSourceMemberId,
         targetMemberId,
@@ -1816,7 +1875,27 @@ export function ScheduleView({ zoomLevel, onZoomIn, onZoomOut, onZoomReset }: Re
     setSelectedMemberForDrag(null);
     setIsDragging(false);
     clearPresence();
-  }, [clipboardAssignment, clipboardSourceMemberId, clipboardMode, selectedMemberForDrag, selectedDays, handleAssignmentDropWithDates, createAssignmentMutation, clearPresence, recordCreation, data?.data.members]);
+  }, [clipboardAssignment, clipboardSourceMemberId, clipboardMode, selectedAssignment, selectedAssignmentMemberId, selectedMemberForDrag, selectedDays, detectConflicts, deleteAssignmentMutation, recordDeletion, executeReassignmentWithDates, createAssignmentMutation, clearPresence, recordCreation, data?.data.members]);
+
+  // Handle Alt/Option+1/2/3 to change status of linked request or assignment display status
+  const handleStatusShortcut = useCallback((code: string): boolean => {
+    if (!selectedAssignment || !canModifyAssignments) return false;
+
+    const statusMap: Record<string, RequestStatus> = {
+      'Digit1': RequestStatus.SCHEDULED,
+      'Digit2': RequestStatus.FORECAST,
+      'Digit3': RequestStatus.UNSCHEDULED,
+    };
+    const status = statusMap[code];
+    if (!status) return false;
+
+    if (selectedAssignment.requestId) {
+      updateRequestStatusMutation.mutate({ requestId: selectedAssignment.requestId, status });
+    } else {
+      updateDisplayStatusMutation.mutate({ id: selectedAssignment.id, displayStatus: status });
+    }
+    return true;
+  }, [selectedAssignment, canModifyAssignments, updateRequestStatusMutation, updateDisplayStatusMutation]);
 
   // Handle Ctrl/Cmd keyboard shortcuts, returns true if handled
   const handleCtrlShortcut = useCallback((key: string): boolean => {
@@ -1827,7 +1906,7 @@ export function ScheduleView({ zoomLevel, onZoomIn, onZoomOut, onZoomReset }: Re
     const shortcuts: Record<string, { guard: boolean; action: () => any }> = {
       c: { guard: hasSelection, action: handleCopy },
       x: { guard: canModifyAssignments && hasSelection && (!selectedAssignment || !isLockedAssignment(selectedAssignment)), action: handleCut },
-      v: { guard: canModifyAssignments && !!clipboardAssignment && hasCellSelection, action: handlePaste },
+      v: { guard: canModifyAssignments && !!clipboardAssignment && (hasCellSelection || hasSelection), action: handlePaste },
       e: { guard: canModifyAssignments && !!selectedAssignment, action: () => setShowEditModal(true) },
       z: { guard: canUndo, action: undo },
       n: { guard: canModifyAssignments && hasCellSelection, action: () => setShowCreateModal(true) },
@@ -2106,6 +2185,12 @@ export function ScheduleView({ zoomLevel, onZoomIn, onZoomOut, onZoomReset }: Re
         return;
       }
 
+      // Alt/Option+1/2/3: change status
+      if (e.altKey && handleStatusShortcut(e.code)) {
+        e.preventDefault();
+        return;
+      }
+
       if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key)) {
         e.preventDefault();
         handleArrowNavigation(e.key, e.shiftKey);
@@ -2114,7 +2199,7 @@ export function ScheduleView({ zoomLevel, onZoomIn, onZoomOut, onZoomReset }: Re
 
     globalThis.addEventListener('keydown', handleKeyDown);
     return () => globalThis.removeEventListener('keydown', handleKeyDown);
-  }, [selectedAssignment, canModifyAssignments, handleDelete, handleCtrlShortcut, showCreateModal, showEditModal, showMemberProfileModal, conflictModalState?.open, handleArrowNavigation]);
+  }, [selectedAssignment, canModifyAssignments, handleDelete, handleCtrlShortcut, handleStatusShortcut, showCreateModal, showEditModal, showMemberProfileModal, conflictModalState?.open, handleArrowNavigation]);
 
   // Handle "Schedule Around" - split assignment into gaps
   const handleScheduleAround = useCallback(async () => {
@@ -2851,7 +2936,7 @@ export function ScheduleView({ zoomLevel, onZoomIn, onZoomOut, onZoomReset }: Re
               if (week.isNewMonth) {
                 boxShadow = 'inset 2px 0 0 0 hsl(var(--foreground))';
               } else if (idx > 0) {
-                boxShadow = 'inset 2px 0 0 0 hsl(var(--border))';
+                boxShadow = 'inset 2px 0 0 0 hsl(var(--foreground) / 0.3)';
               }
 
               return (
@@ -2891,7 +2976,7 @@ export function ScheduleView({ zoomLevel, onZoomIn, onZoomOut, onZoomReset }: Re
               if (isMonthStart) {
                 boxShadow = 'inset 2px 0 0 0 hsl(var(--foreground))';
               } else if (isWeekStart) {
-                boxShadow = 'inset 2px 0 0 0 hsl(var(--border))';
+                boxShadow = 'inset 2px 0 0 0 hsl(var(--foreground) / 0.3)';
               }
 
               // Show "+" button on the rightmost selected column when in column selection mode
@@ -2909,7 +2994,7 @@ export function ScheduleView({ zoomLevel, onZoomIn, onZoomOut, onZoomReset }: Re
                     onMouseEnter={onHeaderMouseEnter}
                     onMouseLeave={onHeaderMouseLeave}
                     className={cn(
-                      'flex h-12 w-full cursor-pointer flex-col items-center justify-center border-b border-r border-border bg-background text-xs transition-colors hover:bg-accent select-none p-0',
+                      'flex h-12 w-full cursor-pointer flex-col items-center justify-center border-b border-r border-foreground/20 bg-background text-xs transition-colors hover:bg-accent select-none p-0',
                       isToday(day) && !isDaySelected && 'bg-blue-100 dark:bg-blue-900',
                       isDaySelected && 'bg-blue-200 dark:bg-blue-800'
                     )}

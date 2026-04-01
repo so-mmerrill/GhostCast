@@ -216,6 +216,9 @@ export class MembersService {
       },
     });
 
+    // Emit real-time event
+    this.realtimeGateway.emitToAll(WebSocketEvent.MEMBER_UPDATED, member);
+
     return member;
   }
 

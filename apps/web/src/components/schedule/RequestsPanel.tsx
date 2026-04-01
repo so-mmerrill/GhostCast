@@ -48,6 +48,11 @@ interface RequestFromApi {
   reportingWeeks: number;
   requiredMemberCount: number;
   requiredMembers: RequestMember[];
+  requester?: {
+    id: string;
+    firstName: string;
+    lastName: string;
+  } | null;
   status: RequestStatus;
 }
 
@@ -86,6 +91,7 @@ function transformRequest(req: RequestFromApi): RequestCardData {
       id: rm.member.id,
       name: `${rm.member.firstName} ${rm.member.lastName}`,
     })),
+    requesterName: req.requester ? `${req.requester.firstName} ${req.requester.lastName}` : null,
     status: req.status,
   };
 }

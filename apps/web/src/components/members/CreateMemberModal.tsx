@@ -3,6 +3,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
 import { MemberCreateInput } from '@ghostcast/shared';
+import { upsertMemberInCache, type CalendarMember } from '@/lib/schedule-cache';
 import { sanitizeInput, VALIDATION } from '@/lib/input-validation';
 import {
   Dialog,
@@ -136,15 +137,16 @@ export function CreateMemberModal({
         workingHours: buildWorkingHoursPayload(),
       };
 
-      await api.post('/members', payload);
+      const response = await api.post<{ data: CalendarMember }>('/members', payload);
 
       toast({
         title: 'Member created',
         description: `${firstName} ${lastName} has been added successfully.`,
       });
 
+      // Upsert the new member directly into schedule caches (no full refetch)
+      upsertMemberInCache(queryClient, response.data);
       queryClient.invalidateQueries({ queryKey: ['members'] });
-      queryClient.invalidateQueries({ queryKey: ['schedule'] });
       handleClose(false);
       onSuccess?.();
     } catch (error) {

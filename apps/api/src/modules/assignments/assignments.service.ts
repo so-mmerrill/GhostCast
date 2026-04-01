@@ -453,11 +453,12 @@ export class AssignmentsService {
       where: { id },
     });
 
-    // Emit real-time event with dates for targeted cache invalidation
+    // Emit real-time event with dates and memberIds for targeted cache invalidation
     this.realtimeGateway.emitToAll(WebSocketEvent.ASSIGNMENT_DELETED, {
       id,
       startDate: assignment.startDate,
       endDate: assignment.endDate,
+      memberIds: assignment.members.map((m) => m.memberId),
     });
   }
 }

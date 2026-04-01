@@ -1,7 +1,7 @@
 import { useCallback } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
-import { refreshScheduleCache } from '@/lib/schedule-cache';
+import { refreshScheduleCache, removeAssignmentFromCache } from '@/lib/schedule-cache';
 import { useToast } from '@/hooks/use-toast';
 import {
   useUndoRedoStore,
@@ -94,7 +94,7 @@ export function useScheduleUndoRedo() {
       const payload = action.payload as DeleteAssignmentPayload;
       try {
         await api.post('/assignments', payload);
-        refreshScheduleCache(queryClient, [{ startDate: payload.startDate, endDate: payload.endDate }]);
+        refreshScheduleCache(queryClient, [{ startDate: payload.startDate, endDate: payload.endDate }], payload.memberIds);
         invalidateQueries();
         toast({ title: 'Assignment restored', description: `"${payload.title}" has been restored.` });
         return true;
@@ -116,7 +116,7 @@ export function useScheduleUndoRedo() {
           endDate: payload.previousState.endDate,
           memberIds: payload.previousState.memberIds,
         });
-        refreshScheduleCache(queryClient, [{ startDate: payload.previousState.startDate, endDate: payload.previousState.endDate }]);
+        refreshScheduleCache(queryClient, [{ startDate: payload.previousState.startDate, endDate: payload.previousState.endDate }], payload.previousState.memberIds);
         invalidateQueries();
         toast({ title: 'Change undone', description: `"${payload.previousState.title}" has been restored to its previous state.` });
         return true;
@@ -134,7 +134,7 @@ export function useScheduleUndoRedo() {
       const payload = action.payload as CreateAssignmentPayload;
       try {
         await api.delete(`/assignments/${payload.assignmentId}`);
-        refreshScheduleCache(queryClient, []);
+        removeAssignmentFromCache(queryClient, payload.assignmentId);
         invalidateQueries();
         toast({ title: 'Creation undone', description: 'The pasted assignment has been removed.' });
         return true;

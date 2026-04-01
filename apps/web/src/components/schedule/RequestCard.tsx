@@ -13,7 +13,7 @@ import {
 import { cn } from '@/lib/utils';
 import { RequestStatus } from '@ghostcast/shared';
 import { api } from '@/lib/api';
-import { updateRequestStatusInCache } from '@/lib/schedule-cache';
+import { updateRequestStatusInCache, updateRequestStatusInPaginatedCache } from '@/lib/schedule-cache';
 import { useToast } from '@/hooks/use-toast';
 
 // Parse date string as local date to avoid timezone offset issues
@@ -46,6 +46,7 @@ export interface RequestCardData {
   reportingWeeks: number;
   requiredMembersCount: number;
   assignedMembers?: AssignedMember[];
+  requesterName?: string | null;
   status: RequestStatus;
 }
 
@@ -75,48 +76,11 @@ export function RequestCard({ request, onClick, isSelected, actions, onHighlight
     mutationFn: async (newStatus: RequestStatus) => {
       return api.put(`/requests/${request.id}`, { status: newStatus });
     },
-    onSuccess: async (_data, newStatus) => {
-      // Immediately update assignment bars on the schedule to reflect the new status
+    onSuccess: (_data, newStatus) => {
+      // Update only linked assignments in the schedule cache (no full calendar refetch)
       updateRequestStatusInCache(queryClient, request.id, newStatus);
-
-      // Immediately remove this request from all paginated caches so the card
-      // disappears from its current section without waiting for refetch.
-      queryClient.setQueriesData(
-        { queryKey: ['requests-paginated'] },
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (oldData: any) => {
-          if (!oldData) return oldData;
-          // useInfiniteQuery caches have a pages array
-          if (oldData.pages && Array.isArray(oldData.pages)) {
-            return {
-              ...oldData,
-              pages: oldData.pages.map((page: { data: { id: string }[]; meta: { total: number } }) => ({
-                ...page,
-                data: page.data.filter((r) => r.id !== request.id),
-                meta: { ...page.meta, total: Math.max(0, page.meta.total - 1) },
-              })),
-            };
-          }
-          // useQueries caches have data array directly
-          if (oldData.data && Array.isArray(oldData.data)) {
-            return {
-              ...oldData,
-              data: oldData.data.filter((r: { id: string }) => r.id !== request.id),
-              meta: oldData.meta ? { ...oldData.meta, total: Math.max(0, oldData.meta.total - 1) } : oldData.meta,
-            };
-          }
-          return oldData;
-        }
-      );
-
-      // Then refetch all queries to get fresh data from server
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['requests'], refetchType: 'all' }),
-        queryClient.invalidateQueries({ queryKey: ['requests-paginated'], refetchType: 'all' }),
-        queryClient.invalidateQueries({ queryKey: ['requests-for-assignment'], refetchType: 'all' }),
-        queryClient.invalidateQueries({ queryKey: ['requests-for-schedule'], refetchType: 'all' }),
-        queryClient.invalidateQueries({ queryKey: ['schedule'], refetchType: 'all' }),
-      ]);
+      // Move the request card between status sections (remove from old, refetch target only)
+      updateRequestStatusInPaginatedCache(queryClient, request.id, newStatus);
       toast({
         title: 'Status updated',
         description: 'Request status has been updated.',
@@ -242,7 +206,14 @@ export function RequestCard({ request, onClick, isSelected, actions, onHighlight
         )}
       </div>
 
-      {/* Row 2: Client - Requested Date */}
+      {/* Row 2: Requester */}
+      {request.requesterName && (
+        <div className="pointer-events-none relative text-xs text-muted-foreground mb-1">
+          Requester - {request.requesterName}
+        </div>
+      )}
+
+      {/* Row 3: Client - Requested Date */}
       <div className="pointer-events-none relative text-xs text-muted-foreground mb-1">
         {[
           request.clientName,

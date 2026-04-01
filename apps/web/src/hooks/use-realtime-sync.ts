@@ -4,7 +4,7 @@ import { io, Socket } from 'socket.io-client';
 import { WebSocketEvent } from '@ghostcast/shared';
 import { api } from '@/lib/api';
 import { useAuth } from '@/features/auth/AuthProvider';
-import { upsertAssignmentInCache, removeAssignmentFromCache, updateRequestStatusInCache } from '@/lib/schedule-cache';
+import { upsertAssignmentInCache, removeAssignmentFromCache, updateRequestStatusInCache, updateRequestStatusInPaginatedCache, upsertMemberInCache, removeMemberFromCache, type CalendarMember } from '@/lib/schedule-cache';
 
 const WS_URL = import.meta.env.VITE_WS_URL || undefined;
 
@@ -56,28 +56,28 @@ export function useRealtimeSync() {
 
     // Listen for assignment events and update caches directly from the payload
     // (the server sends the full assignment object after the DB transaction commits)
-    socket.on(WebSocketEvent.ASSIGNMENT_CREATED, (payload: { data: { id: string; startDate?: string; endDate?: string; [key: string]: unknown } }) => {
+    socket.on(WebSocketEvent.ASSIGNMENT_CREATED, (payload: { data: { id: string; startDate?: string; endDate?: string; members?: Array<{ member: { id: string } }>; [key: string]: unknown } }) => {
+      // Direct cache upsert from the full server payload — no API round-trip needed.
+      // The mutation's onSuccess already handles the member-scoped refreshScheduleCache call,
+      // so we only do the direct cache update here to avoid duplicate GETs.
       if (payload.data.startDate && payload.data.endDate) {
         upsertAssignmentInCache(queryClient, payload.data as { id: string; startDate: string; endDate: string; [key: string]: unknown });
       }
-      queryClient.invalidateQueries({ queryKey: ['schedule'], refetchType: 'all' });
       queryClient.invalidateQueries({ queryKey: ['requests-for-schedule'], refetchType: 'all' });
       queryClient.invalidateQueries({ queryKey: ['request'], refetchType: 'all' });
     });
 
-    socket.on(WebSocketEvent.ASSIGNMENT_UPDATED, (payload: { data: { id: string; startDate?: string; endDate?: string; [key: string]: unknown } }) => {
+    socket.on(WebSocketEvent.ASSIGNMENT_UPDATED, (payload: { data: { id: string; startDate?: string; endDate?: string; members?: Array<{ member: { id: string } }>; [key: string]: unknown } }) => {
       if (payload.data.startDate && payload.data.endDate) {
         upsertAssignmentInCache(queryClient, payload.data as { id: string; startDate: string; endDate: string; [key: string]: unknown });
       }
-      queryClient.invalidateQueries({ queryKey: ['schedule'], refetchType: 'all' });
       queryClient.invalidateQueries({ queryKey: ['requests-for-schedule'], refetchType: 'all' });
       queryClient.invalidateQueries({ queryKey: ['request'], refetchType: 'all' });
     });
 
-    socket.on(WebSocketEvent.ASSIGNMENT_DELETED, (payload: { data: { id: string } }) => {
+    socket.on(WebSocketEvent.ASSIGNMENT_DELETED, (payload: { data: { id: string; memberIds?: string[] } }) => {
       removeAssignmentFromCache(queryClient, payload.data.id);
-      // Invalidate schedule as a safety net in case removeAssignmentFromCache missed it
-      queryClient.invalidateQueries({ queryKey: ['schedule'], refetchType: 'all' });
+      // Cache removal by ID is sufficient — no full schedule invalidation needed
       queryClient.invalidateQueries({ queryKey: ['requests-for-schedule'], refetchType: 'all' });
       queryClient.invalidateQueries({ queryKey: ['request'], refetchType: 'all' });
     });
@@ -96,20 +96,19 @@ export function useRealtimeSync() {
       const requestId = payload?.data?.id;
       const requestStatus = payload?.data?.status;
 
-      // Immediately update assignment styling in schedule caches
+      // Update only linked assignments in schedule caches (no full calendar refetch)
       if (requestId && requestStatus) {
         updateRequestStatusInCache(queryClient, requestId, requestStatus);
+        updateRequestStatusInPaginatedCache(queryClient, requestId, requestStatus);
+      } else {
+        // Non-status update — refresh all paginated request caches
+        queryClient.invalidateQueries({ queryKey: ['requests-paginated'], refetchType: 'all' });
       }
 
-      queryClient.invalidateQueries({ queryKey: ['requests'], refetchType: 'all' });
-      queryClient.invalidateQueries({ queryKey: ['requests-paginated'], refetchType: 'all' });
-      queryClient.invalidateQueries({ queryKey: ['requests-for-schedule'], refetchType: 'all' });
       queryClient.invalidateQueries({ queryKey: ['requests-for-assignment'], refetchType: 'all' });
-      // Only invalidate the specific request that changed instead of all cached requests
       if (requestId) {
         queryClient.invalidateQueries({ queryKey: ['request', requestId], refetchType: 'all' });
       }
-      queryClient.invalidateQueries({ queryKey: ['schedule'], refetchType: 'all' });
     });
 
     socket.on(WebSocketEvent.REQUEST_DELETED, () => {
@@ -121,19 +120,26 @@ export function useRealtimeSync() {
       queryClient.invalidateQueries({ queryKey: ['schedule'], refetchType: 'all' });
     });
 
-    // Listen for member events
-    socket.on(WebSocketEvent.MEMBER_CREATED, () => {
-      queryClient.invalidateQueries({ queryKey: ['schedule'], refetchType: 'all' });
+    // Listen for member events — update schedule caches directly from the payload
+    socket.on(WebSocketEvent.MEMBER_CREATED, (payload: { data: CalendarMember }) => {
+      if (payload.data?.id) {
+        upsertMemberInCache(queryClient, payload.data);
+      }
       queryClient.invalidateQueries({ queryKey: ['members'], refetchType: 'all' });
     });
 
-    socket.on(WebSocketEvent.MEMBER_UPDATED, () => {
-      queryClient.invalidateQueries({ queryKey: ['schedule'], refetchType: 'all' });
+    socket.on(WebSocketEvent.MEMBER_UPDATED, (payload: { data: CalendarMember }) => {
+      if (payload.data?.id) {
+        upsertMemberInCache(queryClient, payload.data);
+      }
       queryClient.invalidateQueries({ queryKey: ['members'], refetchType: 'all' });
+      queryClient.invalidateQueries({ queryKey: ['member', payload.data?.id], refetchType: 'all' });
     });
 
-    socket.on(WebSocketEvent.MEMBER_DELETED, () => {
-      queryClient.invalidateQueries({ queryKey: ['schedule'], refetchType: 'all' });
+    socket.on(WebSocketEvent.MEMBER_DELETED, (payload: { data: { id: string } }) => {
+      if (payload.data?.id) {
+        removeMemberFromCache(queryClient, payload.data.id);
+      }
       queryClient.invalidateQueries({ queryKey: ['members'], refetchType: 'all' });
     });
   }, [queryClient]);
