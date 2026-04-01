@@ -319,6 +319,18 @@ export class SlackNotificationsPlugin extends BasePlugin {
       }
     }
 
+    // For UPDATE actions, show status change if it changed
+    if (auditLog.action === 'UPDATE' && auditLog.oldValue) {
+      const oldData = auditLog.oldValue as Record<string, unknown>;
+      const statusChange = this.formatStatusChange(oldData, entityData);
+      if (statusChange) {
+        fields.push({
+          type: 'mrkdwn',
+          text: `*Status:*\n${statusChange}`,
+        });
+      }
+    }
+
     // Extract dates based on entity type
     const dates = this.extractDates(entityData, auditLog.entity);
     if (dates) {
@@ -406,6 +418,22 @@ export class SlackNotificationsPlugin extends BasePlugin {
     }
 
     return lines.join('\n');
+  }
+
+  private formatStatusChange(
+    oldData: Record<string, unknown>,
+    newData: Record<string, unknown>,
+  ): string | null {
+    const oldStatus = oldData.status;
+    const newStatus = newData.status;
+
+    if (typeof oldStatus !== 'string' || typeof newStatus !== 'string') return null;
+    if (oldStatus === newStatus) return null;
+
+    const formatStatus = (s: string): string =>
+      s.charAt(0).toUpperCase() + s.slice(1).toLowerCase().replaceAll('_', ' ');
+
+    return `${formatStatus(oldStatus)} --> ${formatStatus(newStatus)}`;
   }
 
   private extractDates(data: Record<string, unknown>, entity: string): string | null {
