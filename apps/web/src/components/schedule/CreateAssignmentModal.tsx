@@ -44,6 +44,7 @@ import { sanitizeInput, VALIDATION } from '@/lib/input-validation';
 interface ProjectType {
   id: string;
   name: string;
+  abbreviation?: string | null;
   color: string;
   isActive: boolean;
 }
@@ -679,6 +680,11 @@ export function CreateAssignmentModal({
                                   />
                                 )}
                                 <span className="truncate">{req.title}</span>
+                                {req.projectType?.abbreviation && (
+                                  <span className="text-xs text-muted-foreground">
+                                    - {req.projectType.abbreviation}
+                                  </span>
+                                )}
                                 {req.clientName && (
                                   <span className="text-xs text-muted-foreground">
                                     ({req.clientName})
@@ -754,7 +760,7 @@ export function CreateAssignmentModal({
                     value={projectTypesSearch}
                     onValueChange={setProjectTypesSearch}
                   />
-                  <CommandList className="px-1">
+                  <CommandList className="px-1 max-h-60 overflow-y-auto">
                     <CommandEmpty>No project types found.</CommandEmpty>
                     <CommandGroup>
                       {projectTypes
@@ -850,7 +856,7 @@ export function CreateAssignmentModal({
                       value={projectRolesSearch}
                       onValueChange={setProjectRolesSearch}
                     />
-                    <CommandList className="px-1">
+                    <CommandList className="px-1 max-h-60 overflow-y-auto">
                       <CommandEmpty>No roles found.</CommandEmpty>
                       <CommandGroup>
                         {projectRoles
@@ -943,7 +949,7 @@ export function CreateAssignmentModal({
                       value={formattersSearch}
                       onValueChange={setFormattersSearch}
                     />
-                    <CommandList className="px-1">
+                    <CommandList className="px-1 max-h-60 overflow-y-auto">
                       <CommandEmpty>No formatters found.</CommandEmpty>
                       <CommandGroup>
                         {formatters

@@ -50,6 +50,7 @@ interface Member {
 interface ProjectType {
   id: string;
   name: string;
+  abbreviation?: string | null;
   color: string;
   isActive: boolean;
 }
@@ -156,6 +157,8 @@ export function EditAssignmentModal({
   const [membersSearch, setMembersSearch] = useState('');
   const [projectRolesOpen, setProjectRolesOpen] = useState(false);
   const [projectRolesSearch, setProjectRolesSearch] = useState('');
+  const [projectTypesOpen, setProjectTypesOpen] = useState(false);
+  const [projectTypesSearch, setProjectTypesSearch] = useState('');
   const [formattersOpen, setFormattersOpen] = useState(false);
   const [formattersSearch, setFormattersSearch] = useState('');
 
@@ -619,6 +622,11 @@ export function EditAssignmentModal({
                                   />
                                 )}
                                 <span className="truncate">{req.title}</span>
+                                {req.projectType?.abbreviation && (
+                                  <span className="text-xs text-muted-foreground">
+                                    - {req.projectType.abbreviation}
+                                  </span>
+                                )}
                                 {req.clientName && (
                                   <span className="text-xs text-muted-foreground">
                                     ({req.clientName})
@@ -659,27 +667,84 @@ export function EditAssignmentModal({
             </div>
           )}
 
-          {/* Project Type Selector */}
+          {/* Project Type Selector - Searchable */}
           <div className="space-y-2">
             <Label htmlFor="edit-projectType">Project Type *</Label>
-            <Select value={projectTypeId} onValueChange={setProjectTypeId} disabled={isLocked}>
-              <SelectTrigger>
-                <SelectValue placeholder={loadingProjectTypes ? 'Loading...' : 'Select project type'} />
-              </SelectTrigger>
-              <SelectContent>
-                {projectTypes.map((pt) => (
-                  <SelectItem key={pt.id} value={pt.id}>
-                    <div className="flex items-center gap-2">
+            <Popover open={isLocked ? false : projectTypesOpen} onOpenChange={setProjectTypesOpen}>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  role="combobox"
+                  aria-expanded={projectTypesOpen}
+                  className="w-full justify-between font-normal h-10 overflow-hidden"
+                  type="button"
+                  disabled={isLocked}
+                >
+                  {projectTypeId ? (
+                    <div className="flex items-center gap-2 min-w-0">
                       <div
-                        className="h-3 w-3 rounded-full"
-                        style={{ backgroundColor: pt.color }}
+                        className="h-3 w-3 rounded-full shrink-0"
+                        style={{ backgroundColor: projectTypes.find((pt) => pt.id === projectTypeId)?.color }}
                       />
-                      {pt.name}
+                      <span className="truncate">{projectTypes.find((pt) => pt.id === projectTypeId)?.name}</span>
                     </div>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+                  ) : (
+                    <span className="text-muted-foreground">
+                      {loadingProjectTypes ? 'Loading...' : 'Search and select project type...'}
+                    </span>
+                  )}
+                  <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-full p-0" align="start">
+                <Command shouldFilter={false}>
+                  <CommandInput
+                    placeholder="Search project types..."
+                    value={projectTypesSearch}
+                    onValueChange={setProjectTypesSearch}
+                  />
+                  <CommandList className="px-1 max-h-60 overflow-y-auto">
+                    <CommandEmpty>No project types found.</CommandEmpty>
+                    <CommandGroup>
+                      {projectTypes
+                        .filter((pt) =>
+                          pt.name.toLowerCase().includes(projectTypesSearch.toLowerCase())
+                        )
+                        .map((pt, index) => {
+                          const isSelected = projectTypeId === pt.id;
+                          const isFirstFiltered = index === 0 && projectTypesSearch.length > 0;
+                          return (
+                            <CommandItem
+                              key={pt.id}
+                              value={pt.id}
+                              onSelect={() => {
+                                setProjectTypeId(pt.id);
+                                setProjectTypesSearch('');
+                                setProjectTypesOpen(false);
+                              }}
+                              className={cn(isFirstFiltered && 'bg-accent')}
+                            >
+                              <Check
+                                className={cn(
+                                  'mr-2 h-4 w-4',
+                                  isSelected ? 'opacity-100' : 'opacity-0'
+                                )}
+                              />
+                              <div className="flex items-center gap-2">
+                                <div
+                                  className="h-3 w-3 rounded-full shrink-0"
+                                  style={{ backgroundColor: pt.color }}
+                                />
+                                <span>{pt.name}</span>
+                              </div>
+                            </CommandItem>
+                          );
+                        })}
+                    </CommandGroup>
+                  </CommandList>
+                </Command>
+              </PopoverContent>
+            </Popover>
           </div>
 
           {/* Date Range */}
@@ -906,7 +971,7 @@ export function EditAssignmentModal({
                       value={projectRolesSearch}
                       onValueChange={setProjectRolesSearch}
                     />
-                    <CommandList>
+                    <CommandList className="max-h-60 overflow-y-auto">
                       <CommandEmpty>No roles found.</CommandEmpty>
                       <CommandGroup>
                         {projectRoles
@@ -1002,7 +1067,7 @@ export function EditAssignmentModal({
                       value={formattersSearch}
                       onValueChange={setFormattersSearch}
                     />
-                    <CommandList>
+                    <CommandList className="max-h-60 overflow-y-auto">
                       <CommandEmpty>No formatters found.</CommandEmpty>
                       <CommandGroup>
                         {formatters

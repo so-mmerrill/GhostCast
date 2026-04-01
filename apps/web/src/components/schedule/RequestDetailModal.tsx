@@ -171,6 +171,13 @@ const formatDateShort = (dateString: string) => {
   return format(parseLocalDate(dateString), 'MMM d');
 };
 
+// Extract role group prefix for grouping similar roles
+// e.g. "AT:RTO - Student" -> "AT:RTO", "Pentester" -> "Pentester"
+const getRoleGroupPrefix = (roleName: string): string => {
+  const dashIndex = roleName.indexOf(' - ');
+  return dashIndex > 0 ? roleName.substring(0, dashIndex) : roleName;
+};
+
 function LoadingState() {
   return (
     <div className="flex-1 flex items-center justify-center">
@@ -351,40 +358,85 @@ export function RequestDetailModal({
   const statusConfig = requestData ? STATUS_CONFIG[requestData.status] : null;
   const StatusIcon = statusConfig?.icon;
 
-  // Collect all member assignments as individual entries (not grouped)
-  // This allows split assignments within a week to appear separately
-  const memberAssignmentEntries: Array<{
-    key: string;
-    assignmentId: string;
+  // Count how many distinct members each role group has (for sorting)
+  const roleGroupMemberCounts = new Map<string, Set<string>>();
+  requestData?.assignments?.forEach((assignment) => {
+    const roles = assignment.projectRoles?.map((apr) => apr.projectRole) ?? [];
+    roles.forEach((role) => {
+      const groupPrefix = getRoleGroupPrefix(role.name);
+      if (!roleGroupMemberCounts.has(groupPrefix)) {
+        roleGroupMemberCounts.set(groupPrefix, new Set());
+      }
+      const memberSet = roleGroupMemberCounts.get(groupPrefix)!;
+      assignment.members.forEach((am) => memberSet.add(am.member.id));
+    });
+  });
+
+  // Group all assignments by member so each member gets one card
+  const memberMap = new Map<string, {
+    memberId: string;
     member: Member;
-    startDate: string;
-    endDate: string;
-    assignmentTitle: string;
-    projectRoles: ProjectRole[];
-  }> = [];
+    entries: Array<{
+      assignmentId: string;
+      startDate: string;
+      endDate: string;
+      assignmentTitle: string;
+      projectRoles: ProjectRole[];
+    }>;
+    sortPriority: number;
+    primaryRoleGroup: string;
+  }>();
 
   requestData?.assignments?.forEach((assignment) => {
     const roles = assignment.projectRoles?.map((apr) => apr.projectRole) ?? [];
     assignment.members.forEach((am) => {
-      memberAssignmentEntries.push({
-        key: `${am.member.id}-${assignment.id}`,
+      if (!memberMap.has(am.member.id)) {
+        memberMap.set(am.member.id, {
+          memberId: am.member.id,
+          member: am.member,
+          entries: [],
+          sortPriority: Infinity,
+          primaryRoleGroup: '',
+        });
+      }
+      const card = memberMap.get(am.member.id)!;
+      card.entries.push({
         assignmentId: assignment.id,
-        member: am.member,
         startDate: assignment.startDate,
         endDate: assignment.endDate,
         assignmentTitle: assignment.title,
         projectRoles: roles,
       });
+
+      // Track sort priority: minimum role group member count across all roles
+      roles.forEach((role) => {
+        const groupPrefix = getRoleGroupPrefix(role.name);
+        const count = roleGroupMemberCounts.get(groupPrefix)?.size ?? Infinity;
+        if (count < card.sortPriority) {
+          card.sortPriority = count;
+          card.primaryRoleGroup = groupPrefix;
+        }
+      });
     });
   });
 
-  // Sort by role name, then by start date
-  memberAssignmentEntries.sort((a, b) => {
-    const roleA = a.projectRoles[0]?.name ?? '';
-    const roleB = b.projectRoles[0]?.name ?? '';
-    const roleCompare = roleA.localeCompare(roleB);
-    if (roleCompare !== 0) return roleCompare;
-    return parseLocalDate(a.startDate).getTime() - parseLocalDate(b.startDate).getTime();
+  // Sort: role group (fewest members first), then alphabetically by name
+  const groupedMemberCards = Array.from(memberMap.values());
+  groupedMemberCards.sort((a, b) => {
+    // Group similar roles together first
+    const groupCompare = a.primaryRoleGroup.localeCompare(b.primaryRoleGroup);
+    if (a.sortPriority !== b.sortPriority) return a.sortPriority - b.sortPriority;
+    if (groupCompare !== 0) return groupCompare;
+    const nameA = `${a.member.lastName} ${a.member.firstName}`;
+    const nameB = `${b.member.lastName} ${b.member.firstName}`;
+    return nameA.localeCompare(nameB);
+  });
+
+  // Sort entries within each card by start date
+  groupedMemberCards.forEach((card) => {
+    card.entries.sort(
+      (a, b) => parseLocalDate(a.startDate).getTime() - parseLocalDate(b.startDate).getTime()
+    );
   });
 
   const formatDuration = () => {
@@ -544,7 +596,7 @@ export function RequestDetailModal({
                   <Users className="h-4 w-4" />
                   Assigned Members
                 </h3>
-                {memberAssignmentEntries.length > 0 && (
+                {groupedMemberCards.length > 0 && (
                   <Button
                     variant="destructive"
                     size="sm"
@@ -556,60 +608,67 @@ export function RequestDetailModal({
                 )}
               </div>
 
-              {memberAssignmentEntries.length > 0 ? (
+              {groupedMemberCards.length > 0 ? (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                  {memberAssignmentEntries.map((entry) => {
-                    // Calculate weekdays for this assignment (excluding weekends)
-                    const days = eachDayOfInterval({
-                      start: parseLocalDate(entry.startDate),
-                      end: parseLocalDate(entry.endDate),
-                    });
-                    const weekdays = days.filter((d) => d.getDay() !== 0 && d.getDay() !== 6);
-                    const totalDays = weekdays.length;
-
-                    return (
-                      <div
-                        key={entry.key}
-                        className="rounded-lg border bg-card p-3 hover:bg-accent/50 transition-colors group relative"
-                      >
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="absolute top-2 right-2 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
-                          onClick={() => removeAssignmentMutation.mutate(entry.assignmentId)}
-                          disabled={removeAssignmentMutation.isPending}
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
-                        <div className="font-medium pr-6">
-                          {entry.member.firstName} {entry.member.lastName}
-                        </div>
-                        {entry.projectRoles.length > 0 && (
-                          <div className="flex flex-wrap gap-1 mt-1.5">
-                            {entry.projectRoles.map((role) => (
-                              <span
-                                key={role.id}
-                                className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium"
-                                style={{
-                                  backgroundColor: role.color ? `${role.color}20` : '#6b728020',
-                                  color: role.color ?? '#6b7280',
-                                }}
-                              >
-                                {role.name}
-                              </span>
-                            ))}
-                          </div>
-                        )}
-                        <div className="text-sm text-muted-foreground mt-1">
-                          {formatDateShort(entry.startDate)} -{' '}
-                          {formatDateShort(entry.endDate)}
-                        </div>
-                        <div className="text-xs text-muted-foreground mt-0.5">
-                          {totalDays} day{totalDays === 1 ? '' : 's'}
-                        </div>
+                  {groupedMemberCards.map((card) => (
+                    <div
+                      key={card.memberId}
+                      className="rounded-lg border bg-card p-3 hover:bg-accent/50 transition-colors"
+                    >
+                      <div className="font-medium mb-2">
+                        {card.member.firstName} {card.member.lastName}
                       </div>
-                    );
-                  })}
+                      <div className="space-y-2">
+                        {card.entries.map((entry, entryIdx) => {
+                          const days = eachDayOfInterval({
+                            start: parseLocalDate(entry.startDate),
+                            end: parseLocalDate(entry.endDate),
+                          });
+                          const weekdays = days.filter((d) => d.getDay() !== 0 && d.getDay() !== 6);
+                          const totalDays = weekdays.length;
+
+                          return (
+                            <div key={entry.assignmentId} className="group relative">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="absolute top-0 right-0 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
+                                onClick={() => removeAssignmentMutation.mutate(entry.assignmentId)}
+                                disabled={removeAssignmentMutation.isPending}
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                              {entry.projectRoles.length > 0 && (
+                                <div className="flex flex-wrap gap-1">
+                                  {entry.projectRoles.map((role) => (
+                                    <span
+                                      key={role.id}
+                                      className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium"
+                                      style={{
+                                        backgroundColor: role.color ? `${role.color}20` : '#6b728020',
+                                        color: role.color ?? '#6b7280',
+                                      }}
+                                    >
+                                      {role.name}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+                              <div className="text-sm text-muted-foreground mt-0.5">
+                                {formatDateShort(entry.startDate)} - {formatDateShort(entry.endDate)}
+                                <span className="ml-1 text-xs">
+                                  ({totalDays} day{totalDays === 1 ? '' : 's'})
+                                </span>
+                              </div>
+                              {entryIdx < card.entries.length - 1 && (
+                                <div className="border-b mt-2" />
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
                 </div>
               ) : (
                 <EmptyAssignmentsState />
