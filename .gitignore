@@ -58,3 +58,4 @@ ghostcast.crp.specterops.io/
 
 # Stale npm lockfile (using pnpm)
 package-lock.json
+node_modules
