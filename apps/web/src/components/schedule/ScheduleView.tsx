@@ -655,7 +655,7 @@ export function ScheduleView({ zoomLevel, onZoomIn, onZoomOut, onZoomReset }: Re
   // Zoom derived values
   const colWidth = Math.round(BASE_COL_WIDTH * zoomLevel);
   const collapsedRowHeight = Math.round(32 * zoomLevel);
-  const expandedRowHeight = Math.round(56 * zoomLevel);
+  const expandedRowHeight = Math.max(Math.round(56 * zoomLevel), 32);
   const deptHeaderHeight = Math.round(32 * zoomLevel);
   const zoomedRowHeight = isMembersCollapsed ? collapsedRowHeight : expandedRowHeight;
 
@@ -1592,7 +1592,8 @@ export function ScheduleView({ zoomLevel, onZoomIn, onZoomOut, onZoomReset }: Re
   const handleContextMenu = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     clearSelection();
-  }, [clearSelection]);
+    clearAssignmentSelection();
+  }, [clearSelection, clearAssignmentSelection]);
 
   // Handler for clicking on day header to select that column for all members
   const handleDayHeaderClick = useCallback((dayIndex: number) => {
@@ -2801,14 +2802,14 @@ export function ScheduleView({ zoomLevel, onZoomIn, onZoomOut, onZoomReset }: Re
                       <div className="w-3 flex-shrink-0 border-r h-full" />
                       <button
                         onClick={() => toggleDepartmentCollapse(item.department)}
-                        className="flex-1 flex items-center gap-2 px-2 text-left hover:bg-accent/50 transition-colors"
+                        className="flex-1 flex items-center gap-2 px-2 text-left hover:bg-accent/50 transition-colors overflow-hidden min-w-0"
                       >
                         {isDeptCollapsed ? (
-                          <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                          <ChevronRight className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
                         ) : (
-                          <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                          <ChevronDown className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
                         )}
-                        <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                        <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide truncate">
                           {item.department}
                         </span>
                       </button>
@@ -2868,13 +2869,17 @@ export function ScheduleView({ zoomLevel, onZoomIn, onZoomOut, onZoomReset }: Re
                         className="flex-1 text-left px-1 overflow-hidden"
                       >
                         <div className={cn(
-                          'text-sm truncate',
+                          'truncate',
+                          zoomLevel < 0.75 ? 'text-xs leading-none' : 'text-sm',
                           member.indentLevel === 0 ? 'font-semibold' : 'font-medium'
                         )}>
                           {member.firstName} {member.lastName}
                         </div>
                         {!isMembersCollapsed && member.position && (
-                          <div className="text-xs text-muted-foreground truncate">{member.position}</div>
+                          <div className={cn(
+                            'text-muted-foreground truncate',
+                            zoomLevel < 0.75 ? 'text-[10px] leading-none' : 'text-xs'
+                          )}>{member.position}</div>
                         )}
                       </button>
                     </div>
