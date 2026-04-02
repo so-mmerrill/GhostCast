@@ -15,7 +15,8 @@ import {
   differenceInDays,
 } from 'date-fns';
 import { api } from '@/lib/api';
-import { ChevronDown, ChevronUp, ChevronRight, Plus, X, Pencil, Clock4, TrendingUp, CalendarCheck } from 'lucide-react';
+import { MoreVertical, ChevronDown, ChevronRight, Plus, X, Pencil, Clock4, TrendingUp, CalendarCheck } from 'lucide-react';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuLabel, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import {
   Popover,
   PopoverContent,
@@ -35,7 +36,7 @@ import { useScheduleUndoRedo } from '@/hooks/use-schedule-undo-redo';
 import { useUndoRedoStore } from '@/stores/undo-redo-store';
 import { useScheduleViewStore } from '@/stores/schedule-view-store';
 import { CellSelection, AssignmentSelection, AssignmentStatus, RequestStatus, Role, generateRequestColors, generateClientColors } from '@ghostcast/shared';
-import type { ColorMode } from '@/stores/schedule-view-store';
+import type { ColorMode, MemberSortBy, DepartmentSortBy } from '@/stores/schedule-view-store';
 import { useAuth } from '@/features/auth/AuthProvider';
 import { refreshScheduleCache, findAssignmentDatesInCache, findAssignmentMemberIdsInCache, removeAssignmentFromCache, updateRequestStatusInCache, updateRequestStatusInPaginatedCache } from '@/lib/schedule-cache';
 
@@ -156,7 +157,9 @@ type MemberListItem = DepartmentHeader | MemberRow;
 function sortMembersHierarchically(
   members: CalendarMember[],
   collapsedManagerIds: Set<string>,
-  collapsedDepartments: Set<string>
+  collapsedDepartments: Set<string>,
+  memberSortBy: MemberSortBy = 'name',
+  departmentSortBy: DepartmentSortBy = 'alpha',
 ): MemberListItem[] {
   const memberMap = new Map<string, CalendarMember>();
   const childrenMap = new Map<string, CalendarMember[]>();
@@ -192,12 +195,54 @@ function sortMembersHierarchically(
     departmentGroups.set(dept, group);
   }
 
-  // Sort departments alphabetically, but put "Other" last
+  // Count all members per department (including nested reports, not just top-level)
+  const departmentTotalCounts = new Map<string, number>();
+  for (const member of members) {
+    const dept = member.department || 'Other';
+    departmentTotalCounts.set(dept, (departmentTotalCounts.get(dept) ?? 0) + 1);
+  }
+
+  // Sort departments based on departmentSortBy, always keeping "Other" last
   const sortedDepartments = Array.from(departmentGroups.keys()).sort((a, b) => {
     if (a === 'Other') return 1;
     if (b === 'Other') return -1;
-    return a.localeCompare(b);
+    switch (departmentSortBy) {
+      case 'alpha-desc':
+        return b.localeCompare(a);
+      case 'member-count-desc': {
+        const aCount = departmentTotalCounts.get(a) ?? 0;
+        const bCount = departmentTotalCounts.get(b) ?? 0;
+        return bCount - aCount || a.localeCompare(b);
+      }
+      case 'member-count-asc': {
+        const aCount = departmentTotalCounts.get(a) ?? 0;
+        const bCount = departmentTotalCounts.get(b) ?? 0;
+        return aCount - bCount || a.localeCompare(b);
+      }
+      case 'alpha':
+      default:
+        return a.localeCompare(b);
+    }
   });
+
+  // Member comparator based on memberSortBy
+  const compareMember = (a: CalendarMember, b: CalendarMember) => {
+    const aHasDirects = hasDirects(a);
+    const bHasDirects = hasDirects(b);
+    // Members without directs come first
+    if (aHasDirects !== bHasDirects) return aHasDirects ? 1 : -1;
+
+    if (memberSortBy === 'position') {
+      // Sort by position, nulls last, then by name as tiebreaker
+      if (a.position && !b.position) return -1;
+      if (!a.position && b.position) return 1;
+      if (a.position && b.position) {
+        const posCmp = a.position.localeCompare(b.position);
+        if (posCmp !== 0) return posCmp;
+      }
+    }
+    return `${a.lastName} ${a.firstName}`.localeCompare(`${b.lastName} ${b.firstName}`);
+  };
 
   // Recursively add members with their reports
   const result: MemberListItem[] = [];
@@ -213,14 +258,7 @@ function sortMembersHierarchically(
       return;
     }
 
-    // Sort reports: members without directs first, then by name
-    reports.sort((a, b) => {
-      const aHasDirects = hasDirects(a);
-      const bHasDirects = hasDirects(b);
-      // Members without directs come first
-      if (aHasDirects !== bHasDirects) return aHasDirects ? 1 : -1;
-      return `${a.lastName} ${a.firstName}`.localeCompare(`${b.lastName} ${b.firstName}`);
-    });
+    reports.sort(compareMember);
 
     for (const report of reports) {
       addMemberWithReports(report, indentLevel + 1);
@@ -239,14 +277,7 @@ function sortMembersHierarchically(
       continue;
     }
 
-    // Sort members within department: members without directs first, then by name
-    deptMembers.sort((a, b) => {
-      const aHasDirects = hasDirects(a);
-      const bHasDirects = hasDirects(b);
-      // Members without directs come first
-      if (aHasDirects !== bHasDirects) return aHasDirects ? 1 : -1;
-      return `${a.lastName} ${a.firstName}`.localeCompare(`${b.lastName} ${b.firstName}`);
-    });
+    deptMembers.sort(compareMember);
 
     for (const member of deptMembers) {
       addMemberWithReports(member, 0);
@@ -627,7 +658,7 @@ interface ScheduleViewProps {
 }
 
 export function ScheduleView({ zoomLevel, onZoomIn, onZoomOut, onZoomReset }: Readonly<ScheduleViewProps>) {
-  const { hasRole } = useAuth();
+  const { hasRole, user, updateProfile } = useAuth();
   const canModifyAssignments = hasRole(Role.SCHEDULER);
   const [selectedDays, setSelectedDays] = useState<Set<string>>(new Set());
   const [selectedMembers, setSelectedMembers] = useState<Set<string>>(new Set());
@@ -638,11 +669,35 @@ export function ScheduleView({ zoomLevel, onZoomIn, onZoomOut, onZoomReset }: Re
     collapsedDepartments: storedCollapsedDepts,
     setCollapsedDepartments: setStoredCollapsedDepts,
     colorMode,
+    memberSortBy,
+    setMemberSortBy,
+    departmentSortBy,
+    setDepartmentSortBy,
+    initSortFromPreferences,
   } = useScheduleViewStore();
+
+  const handleMemberSortChange = (value: string) => {
+    const sort = value as MemberSortBy;
+    setMemberSortBy(sort);
+    updateProfile({ preferences: { ...(user?.preferences), scheduleMemberSortBy: sort } });
+  };
+
+  const handleDepartmentSortChange = (value: string) => {
+    const sort = value as DepartmentSortBy;
+    setDepartmentSortBy(sort);
+    updateProfile({ preferences: { ...(user?.preferences), scheduleDepartmentSortBy: sort } });
+  };
   const collapsedDepartments = useMemo(() => new Set(storedCollapsedDepts), [storedCollapsedDepts]);
   const [collapsedManagerIds, setCollapsedManagerIds] = useState<Set<string>>(new Set());
   const [memberColWidth, setMemberColWidth] = useState(DEFAULT_memberColWidth);
   const [isResizingColumn, setIsResizingColumn] = useState(false);
+
+  // Initialize sort preferences from user's DB preferences on load
+  useEffect(() => {
+    if (user?.preferences) {
+      initSortFromPreferences(user.preferences);
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Grid ref with callback to trigger effect re-runs when grid mounts
   const gridRef = useRef<HTMLDivElement | null>(null);
@@ -1349,8 +1404,8 @@ export function ScheduleView({ zoomLevel, onZoomIn, onZoomOut, onZoomReset }: Re
     const visibleMembers = data.data.members.filter(
       (member) => !member.metadata?.hideFromSchedule
     );
-    return sortMembersHierarchically(visibleMembers, collapsedManagerIds, collapsedDepartments);
-  }, [data?.data.members, collapsedManagerIds, collapsedDepartments]);
+    return sortMembersHierarchically(visibleMembers, collapsedManagerIds, collapsedDepartments, memberSortBy, departmentSortBy);
+  }, [data?.data.members, collapsedManagerIds, collapsedDepartments, memberSortBy, departmentSortBy]);
 
   // Memoized lookup for other users' presence indicators (bubble on last/rightmost cell only)
   // and selection highlights (all selected cells)
@@ -2774,16 +2829,40 @@ export function ScheduleView({ zoomLevel, onZoomIn, onZoomOut, onZoomReset }: Re
             >
               {/* Column Header - sticky top, fixed height matching grid headers */}
               <div className="sticky top-0 z-40 flex h-[6.5rem] flex-shrink-0 flex-col border-b bg-muted px-4">
-                {/* Team Members label + collapse toggle */}
-                <div className="flex flex-1 items-center justify-center gap-2">
+                {/* Team Members label + sort dropdown + collapse toggle */}
+                <div className="flex flex-1 items-center justify-center gap-1">
                   <span className="text-sm font-semibold text-muted-foreground">Team Members</span>
-                  <button
-                    onClick={() => setIsMembersCollapsed(!isMembersCollapsed)}
-                    className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-                    aria-label={isMembersCollapsed ? 'Expand member rows' : 'Collapse member rows'}
-                  >
-                    {isMembersCollapsed ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}
-                  </button>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <button
+                        className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                        title="Options"
+                      >
+                        <MoreVertical className="h-3.5 w-3.5" />
+                      </button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="start" className="w-48">
+                      <DropdownMenuLabel className="text-xs text-muted-foreground">Department Order</DropdownMenuLabel>
+                      <DropdownMenuRadioGroup value={departmentSortBy} onValueChange={handleDepartmentSortChange}>
+                        <DropdownMenuRadioItem value="alpha">A → Z</DropdownMenuRadioItem>
+                        <DropdownMenuRadioItem value="alpha-desc">Z → A</DropdownMenuRadioItem>
+                        <DropdownMenuRadioItem value="member-count-desc">Most Members</DropdownMenuRadioItem>
+                        <DropdownMenuRadioItem value="member-count-asc">Fewest Members</DropdownMenuRadioItem>
+                      </DropdownMenuRadioGroup>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuLabel className="text-xs text-muted-foreground">Member Order</DropdownMenuLabel>
+                      <DropdownMenuRadioGroup value={memberSortBy} onValueChange={handleMemberSortChange}>
+                        <DropdownMenuRadioItem value="name">By Name</DropdownMenuRadioItem>
+                        <DropdownMenuRadioItem value="position">By Position</DropdownMenuRadioItem>
+                      </DropdownMenuRadioGroup>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuLabel className="text-xs text-muted-foreground">Display</DropdownMenuLabel>
+                      <DropdownMenuRadioGroup value={isMembersCollapsed ? 'collapsed' : 'expanded'} onValueChange={(v) => setIsMembersCollapsed(v === 'collapsed')}>
+                        <DropdownMenuRadioItem value="expanded">Show Position</DropdownMenuRadioItem>
+                        <DropdownMenuRadioItem value="collapsed">Hide Position</DropdownMenuRadioItem>
+                      </DropdownMenuRadioGroup>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </div>
               </div>
               {/* Member List - no internal scroll */}

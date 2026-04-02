@@ -259,7 +259,7 @@ export const MemberInfoTab = forwardRef<MemberInfoTabRef, MemberInfoTabProps>(
                             setManagerOpen(false);
                           }}
                         >
-                          <Check className={cn('mr-2 h-4 w-4', !formData.managerId ? 'opacity-100' : 'opacity-0')} />
+                          <Check className={cn('mr-2 h-4 w-4', formData.managerId ? 'opacity-0' : 'opacity-100')} />
                           None
                         </CommandItem>
                         {managersWithCurrent.map((m) => (
