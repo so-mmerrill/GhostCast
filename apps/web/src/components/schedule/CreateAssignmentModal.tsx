@@ -29,7 +29,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover';
-import { Loader2, User, Calendar, Tag, Check, FileText, Users, ChevronsUpDown, X, Building2, Minus, Lock, LockOpen } from 'lucide-react';
+import { Loader2, User, Tag, Check, FileText, Users, ChevronsUpDown, X, Building2, Minus, Lock, LockOpen } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { RequestStatus } from '@ghostcast/shared';
 import {
@@ -115,6 +115,8 @@ export function CreateAssignmentModal({
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [projectTypeId, setProjectTypeId] = useState('');
+  const [startDate, setStartDate] = useState(format(initialStartDate, 'yyyy-MM-dd'));
+  const [endDate, setEndDate] = useState(format(initialEndDate, 'yyyy-MM-dd'));
   const [selectedFormatterIds, setSelectedFormatterIds] = useState<string[]>([]);
   const [selectedProjectRoleIds, setSelectedProjectRoleIds] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -232,10 +234,11 @@ export function CreateAssignmentModal({
     FORECAST: 'Forecast',
   };
 
-  // Format dates for display
-  const startDateFormatted = format(initialStartDate, 'MMM d, yyyy');
-  const endDateFormatted = format(initialEndDate, 'MMM d, yyyy');
-  const isSameDay = format(initialStartDate, 'yyyy-MM-dd') === format(initialEndDate, 'yyyy-MM-dd');
+  // Sync date state when initial dates change (e.g. new cell selection)
+  useEffect(() => {
+    setStartDate(format(initialStartDate, 'yyyy-MM-dd'));
+    setEndDate(format(initialEndDate, 'yyyy-MM-dd'));
+  }, [initialStartDate, initialEndDate]);
 
   // Fetch project types (use large pageSize to get all)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -348,6 +351,7 @@ export function CreateAssignmentModal({
   };
 
   const isValid = title.trim() !== '' && projectTypeId !== '' &&
+    startDate !== '' && endDate !== '' && endDate >= startDate &&
     (!isMultiMemberMode || selectedMemberIds.length > 0);
 
   const resetForm = () => {
@@ -359,6 +363,8 @@ export function CreateAssignmentModal({
     setSelectedRequestId('manual');
     setSelectedMemberIds([]);
     setMembersSearch('');
+    setStartDate(format(initialStartDate, 'yyyy-MM-dd'));
+    setEndDate(format(initialEndDate, 'yyyy-MM-dd'));
     setDisplayStatus('SCHEDULED');
     setIsLocked(false);
   };
@@ -379,8 +385,8 @@ export function CreateAssignmentModal({
       const payload = {
         title: title.trim(),
         description: description.trim() || undefined,
-        startDate: format(initialStartDate, 'yyyy-MM-dd'),
-        endDate: format(initialEndDate, 'yyyy-MM-dd'),
+        startDate,
+        endDate,
         projectTypeId,
         memberIds: isMultiMemberMode ? selectedMemberIds : [initialMemberId],
         formatterIds: selectedFormatterIds.length > 0 ? selectedFormatterIds : undefined,
@@ -450,23 +456,40 @@ export function CreateAssignmentModal({
 
         <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0 min-w-0">
           <div className="space-y-4 flex-1 overflow-y-auto pr-1 pl-1">
-          {/* Date Display (Read-only) */}
+          {/* Assignment Details */}
           <div className="space-y-2">
             <Label>Assignment Details</Label>
-            <div className="rounded-md border bg-muted/50 p-3 space-y-2">
+            <div className="rounded-md border bg-muted/50 p-3 space-y-3">
               {!isMultiMemberMode && (
                 <div className="flex items-center gap-2 text-sm">
                   <User className="h-4 w-4 text-muted-foreground" />
                   <span className="font-medium">{initialMemberName}</span>
                 </div>
               )}
-              <div className="flex items-center gap-2 text-sm">
-                <Calendar className="h-4 w-4 text-muted-foreground" />
-                <span>
-                  {isSameDay
-                    ? startDateFormatted
-                    : `${startDateFormatted} – ${endDateFormatted}`}
-                </span>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="create-startDate">Start Date *</Label>
+                  <Input
+                    id="create-startDate"
+                    type="date"
+                    value={startDate}
+                    onChange={(e) => setStartDate(e.target.value)}
+                    required
+                    className="h-10 w-full [&::-webkit-calendar-picker-indicator]:ml-auto [&::-webkit-calendar-picker-indicator]:cursor-pointer [&::-webkit-calendar-picker-indicator]:dark:invert [&::-webkit-calendar-picker-indicator]:dark:opacity-70"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="create-endDate">End Date *</Label>
+                  <Input
+                    id="create-endDate"
+                    type="date"
+                    value={endDate}
+                    onChange={(e) => setEndDate(e.target.value)}
+                    min={startDate}
+                    required
+                    className="h-10 w-full [&::-webkit-calendar-picker-indicator]:ml-auto [&::-webkit-calendar-picker-indicator]:cursor-pointer [&::-webkit-calendar-picker-indicator]:dark:invert [&::-webkit-calendar-picker-indicator]:dark:opacity-70"
+                  />
+                </div>
               </div>
             </div>
           </div>
