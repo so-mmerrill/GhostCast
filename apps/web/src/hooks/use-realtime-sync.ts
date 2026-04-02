@@ -32,7 +32,9 @@ export function useRealtimeSync() {
 
     const socket = io(WS_URL, {
       path: '/ws',
-      auth: { token },
+      auth: (cb) => {
+        cb({ token: api.getToken() });
+      },
       transports: ['websocket'],
       reconnection: true,
       reconnectionAttempts: 10,
