@@ -8,6 +8,7 @@ import {
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { UserPluginsService } from './user-plugins.service';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { User } from '@ghostcast/database';
@@ -17,6 +18,7 @@ import { User } from '@ghostcast/database';
  * Unlike IntegrationsController (admin-only), this allows individual users
  * to enable/disable USER-scoped plugins for themselves.
  */
+@Throttle({ short: {}, medium: {}, long: {} })
 @Controller('user-plugins')
 export class UserPluginsController {
   constructor(private readonly userPluginsService: UserPluginsService) {}

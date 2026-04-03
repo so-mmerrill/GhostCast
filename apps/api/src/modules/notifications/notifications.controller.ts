@@ -9,11 +9,13 @@ import {
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { NotificationsService } from './notifications.service';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { User } from '@ghostcast/database';
 import { PaginationDto } from '../../common/dto/pagination.dto';
 
+@Throttle({ short: {}, medium: {}, long: {} })
 @Controller('notifications')
 export class NotificationsController {
   constructor(private readonly notificationsService: NotificationsService) {}

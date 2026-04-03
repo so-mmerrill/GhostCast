@@ -8,10 +8,12 @@ import {
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { UserSettingsService } from './user-settings.service';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { User } from '@ghostcast/database';
 
+@Throttle({ short: {}, medium: {}, long: {} })
 @Controller('user-settings')
 export class UserSettingsController {
   constructor(private readonly userSettingsService: UserSettingsService) {}

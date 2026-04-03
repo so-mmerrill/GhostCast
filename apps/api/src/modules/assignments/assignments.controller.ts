@@ -10,6 +10,7 @@ import {
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { AssignmentsService } from './assignments.service';
 import { CreateAssignmentDto } from './dto/create-assignment.dto';
 import { UpdateAssignmentDto } from './dto/update-assignment.dto';
@@ -21,6 +22,7 @@ import { Role } from '@ghostcast/shared';
 import { User } from '@ghostcast/database';
 import { Audit } from '../../common/decorators/audit.decorator';
 
+@Throttle({ short: {}, medium: {}, long: {} })
 @Controller('assignments')
 export class AssignmentsController {
   constructor(private readonly assignmentsService: AssignmentsService) {}

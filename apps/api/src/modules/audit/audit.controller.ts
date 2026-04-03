@@ -1,10 +1,12 @@
 import { Controller, Get, Query } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { AuditService } from './audit.service';
 import { AuditQueryDto } from './dto/audit-query.dto';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { Role } from '@ghostcast/shared';
 import { SkipAudit } from '../../common/decorators/audit.decorator';
 
+@Throttle({ short: {}, medium: {}, long: {} })
 @Controller('audit-logs')
 @Roles(Role.ADMIN)
 @SkipAudit()

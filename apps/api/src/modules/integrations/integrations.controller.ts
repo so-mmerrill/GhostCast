@@ -9,6 +9,7 @@ import {
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { IntegrationsService } from './integrations.service';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { Audit } from '../../common/decorators/audit.decorator';
@@ -16,6 +17,7 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Role } from '@ghostcast/shared';
 import { User } from '@ghostcast/database';
 
+@Throttle({ short: {}, medium: {}, long: {} })
 @Controller('integrations')
 @Roles(Role.ADMIN)
 export class IntegrationsController {

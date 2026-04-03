@@ -9,6 +9,7 @@ import {
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { Role, IngestionJobStatus } from '@ghostcast/shared';
 import { Audit } from '../../common/decorators/audit.decorator';
@@ -22,6 +23,7 @@ interface CurrentUserType {
   role: Role;
 }
 
+@Throttle({ short: {}, medium: {}, long: {} })
 @Controller('ingestion')
 @Roles(Role.ADMIN, Role.MANAGER)
 export class IngestionController {

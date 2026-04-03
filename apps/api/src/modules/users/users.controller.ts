@@ -10,6 +10,7 @@ import {
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { UsersService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
@@ -18,6 +19,7 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { Role } from '@ghostcast/shared';
 import { Audit } from '../../common/decorators/audit.decorator';
 
+@Throttle({ short: {}, medium: {}, long: {} })
 @Controller('users')
 @Roles(Role.ADMIN)
 export class UsersController {

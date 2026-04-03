@@ -10,6 +10,7 @@ import {
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { ProjectTypesService } from './project-types.service';
 import { CreateProjectTypeDto } from './dto/create-project-type.dto';
 import { UpdateProjectTypeDto } from './dto/update-project-type.dto';
@@ -18,6 +19,7 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { Role } from '@ghostcast/shared';
 import { Audit } from '../../common/decorators/audit.decorator';
 
+@Throttle({ short: {}, medium: {}, long: {} })
 @Controller('project-types')
 export class ProjectTypesController {
   constructor(private readonly projectTypesService: ProjectTypesService) {}

@@ -9,6 +9,7 @@ import {
   PayloadTooLargeException,
   Logger,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
 import { PdfResumeImportService } from './pdf-resume-import.service';
@@ -21,6 +22,7 @@ import { User } from '@ghostcast/database';
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 
+@Throttle({ short: {}, medium: {}, long: {} })
 @Controller('pdf-resume-import')
 export class PdfResumeImportController {
   private readonly logger = new Logger(PdfResumeImportController.name);

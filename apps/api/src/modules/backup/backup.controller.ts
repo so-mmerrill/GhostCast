@@ -10,6 +10,7 @@ import {
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { Audit } from '../../common/decorators/audit.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -26,6 +27,7 @@ interface CurrentUserType {
   role: Role;
 }
 
+@Throttle({ short: {}, medium: {}, long: {} })
 @Controller('backups')
 @Roles(Role.ADMIN)
 export class BackupController {

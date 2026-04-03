@@ -10,6 +10,7 @@ import {
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { FormattersService } from './formatters.service';
 import { CreateFormatterDto } from './dto/create-formatter.dto';
 import { UpdateFormatterDto } from './dto/update-formatter.dto';
@@ -18,6 +19,7 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { Role } from '@ghostcast/shared';
 import { Audit } from '../../common/decorators/audit.decorator';
 
+@Throttle({ short: {}, medium: {}, long: {} })
 @Controller('formatters')
 export class FormattersController {
   constructor(private readonly formattersService: FormattersService) {}

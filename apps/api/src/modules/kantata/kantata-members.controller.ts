@@ -6,6 +6,7 @@ import {
   HttpStatus,
   BadRequestException,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { Audit } from '../../common/decorators/audit.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -13,6 +14,7 @@ import { Role } from '@ghostcast/shared';
 import { User } from '@ghostcast/database';
 import { KantataMembersSyncService } from './kantata-members-sync.service';
 
+@Throttle({ short: {}, medium: {}, long: {} })
 @Controller('kantata/members')
 export class KantataMembersController {
   constructor(

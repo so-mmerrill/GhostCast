@@ -6,12 +6,14 @@ import {
   Param,
   Query,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { AdminService } from './admin.service';
 import { UpdateConfigDto } from './dto/update-config.dto';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { Role } from '@ghostcast/shared';
 import { Audit } from '../../common/decorators/audit.decorator';
 
+@Throttle({ short: {}, medium: {}, long: {} })
 @Controller('admin')
 @Roles(Role.ADMIN)
 export class AdminController {

@@ -10,6 +10,7 @@ import {
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { RequestsService } from './requests.service';
 import { CreateRequestDto } from './dto/create-request.dto';
 import { UpdateRequestDto } from './dto/update-request.dto';
@@ -25,6 +26,7 @@ interface UserPayload {
   role: Role;
 }
 
+@Throttle({ short: {}, medium: {}, long: {} })
 @Controller('requests')
 export class RequestsController {
   constructor(private readonly requestsService: RequestsService) {}

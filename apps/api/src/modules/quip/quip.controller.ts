@@ -5,6 +5,7 @@ import {
   Query,
   BadRequestException,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { QuipApiClient } from './quip-api.client';
 import { QuipParserService } from './quip-parser.service';
 import { UserSettingsService } from '../user-settings/user-settings.service';
@@ -20,6 +21,7 @@ import {
 
 const QUIP_CATALOG_ID = 'quip-document-import';
 
+@Throttle({ short: {}, medium: {}, long: {} })
 @Controller('quip')
 export class QuipController {
   constructor(

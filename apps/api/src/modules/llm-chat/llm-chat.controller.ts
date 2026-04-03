@@ -1,10 +1,12 @@
 import { Controller, Post, Body } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { LlmChatService } from './llm-chat.service';
 import { ChatCompletionDto } from './dto/chat-completion.dto';
 import { Audit } from '../../common/decorators/audit.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { User } from '@ghostcast/database';
 
+@Throttle({ short: {}, medium: {}, long: {} })
 @Controller('llm-chat')
 export class LlmChatController {
   constructor(private readonly llmChatService: LlmChatService) {}
