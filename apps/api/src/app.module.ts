@@ -57,28 +57,34 @@ import { RbacGuard } from './common/guards/rbac.guard';
     // Rate limiting
     ThrottlerModule.forRootAsync({
       inject: [ConfigService],
-      useFactory: (config: ConfigService) => [
-        {
-          name: 'short',
-          ttl: config.get<number>('rateLimit.shortTtl', 1000),
-          limit: config.get<number>('rateLimit.shortMax', 10),
-        },
-        {
-          name: 'medium',
-          ttl: config.get<number>('rateLimit.mediumTtl', 10000),
-          limit: config.get<number>('rateLimit.mediumMax', 50),
-        },
-        {
-          name: 'long',
-          ttl: config.get<number>('rateLimit.longTtl', 60000),
-          limit: config.get<number>('rateLimit.longMax', 300),
-        },
-        {
-          name: 'login',
-          ttl: config.get<number>('rateLimit.loginTtl', 60000),
-          limit: config.get<number>('rateLimit.loginMax', 5),
-        },
-      ],
+      useFactory: (config: ConfigService) => {
+        const throttlers = [
+          {
+            name: 'short',
+            ttl: config.get<number>('rateLimit.shortTtl', 1000),
+            limit: config.get<number>('rateLimit.shortMax', 10),
+          },
+          {
+            name: 'medium',
+            ttl: config.get<number>('rateLimit.mediumTtl', 10000),
+            limit: config.get<number>('rateLimit.mediumMax', 50),
+          },
+          {
+            name: 'long',
+            ttl: config.get<number>('rateLimit.longTtl', 60000),
+            limit: config.get<number>('rateLimit.longMax', 300),
+          },
+          {
+            name: 'login',
+            ttl: config.get<number>('rateLimit.loginTtl', 60000),
+            limit: config.get<number>('rateLimit.loginMax', 5),
+          },
+        ];
+        console.log('[Throttler] Resolved config:', JSON.stringify(throttlers));
+        console.log('[Throttler] Raw env check - THROTTLE_SHORT_MAX:', process.env.THROTTLE_SHORT_MAX);
+        console.log('[Throttler] ConfigService rateLimit:', JSON.stringify(config.get('rateLimit')));
+        return throttlers;
+      },
     }),
 
     // Scheduled tasks
