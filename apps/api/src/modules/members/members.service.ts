@@ -364,10 +364,16 @@ export class MembersService {
     };
   }
 
+  private calculateDays(startDate: Date, endDate: Date): number {
+    const diffMs = endDate.getTime() - startDate.getTime();
+    return Math.max(1, Math.ceil(diffMs / (1000 * 60 * 60 * 24)) + 1);
+  }
+
   private groupByRequestProjectType(
     assignments: Array<{
       requestId: string | null;
       startDate: Date;
+      endDate: Date;
       request: {
         id: string;
         projectType: {
@@ -384,6 +390,7 @@ export class MembersService {
       {
         projectType: { id: string; name: string; color: string; abbreviation: string | null };
         requestIds: Set<string>;
+        totalDays: number;
         lastDate: Date;
       }
     >();
@@ -392,9 +399,11 @@ export class MembersService {
       const projectType = assignment.request?.projectType;
       if (!projectType) continue;
 
+      const days = this.calculateDays(assignment.startDate, assignment.endDate);
       const existing = projectTypeMap.get(projectType.id);
       if (existing) {
         existing.requestIds.add(assignment.requestId!);
+        existing.totalDays += days;
         if (assignment.startDate > existing.lastDate) {
           existing.lastDate = assignment.startDate;
         }
@@ -402,6 +411,7 @@ export class MembersService {
         projectTypeMap.set(projectType.id, {
           projectType,
           requestIds: new Set([assignment.requestId!]),
+          totalDays: days,
           lastDate: assignment.startDate,
         });
       }
@@ -414,6 +424,7 @@ export class MembersService {
         projectTypeColor: entry.projectType.color,
         projectTypeAbbreviation: entry.projectType.abbreviation,
         count: entry.requestIds.size,
+        days: entry.totalDays,
         lastAssignmentDate: entry.lastDate,
       }))
       .sort((a, b) => b.lastAssignmentDate.getTime() - a.lastAssignmentDate.getTime());
@@ -423,6 +434,7 @@ export class MembersService {
     assignments: Array<{
       projectTypeId: string;
       startDate: Date;
+      endDate: Date;
       projectType: {
         id: string;
         name: string;
@@ -436,14 +448,17 @@ export class MembersService {
       {
         projectType: { id: string; name: string; color: string; abbreviation: string | null };
         count: number;
+        totalDays: number;
         lastDate: Date;
       }
     >();
 
     for (const assignment of assignments) {
+      const days = this.calculateDays(assignment.startDate, assignment.endDate);
       const existing = projectTypeMap.get(assignment.projectTypeId);
       if (existing) {
         existing.count++;
+        existing.totalDays += days;
         if (assignment.startDate > existing.lastDate) {
           existing.lastDate = assignment.startDate;
         }
@@ -451,6 +466,7 @@ export class MembersService {
         projectTypeMap.set(assignment.projectTypeId, {
           projectType: assignment.projectType,
           count: 1,
+          totalDays: days,
           lastDate: assignment.startDate,
         });
       }
@@ -463,6 +479,7 @@ export class MembersService {
         projectTypeColor: entry.projectType.color,
         projectTypeAbbreviation: entry.projectType.abbreviation,
         count: entry.count,
+        days: entry.totalDays,
         lastAssignmentDate: entry.lastDate,
       }))
       .sort((a, b) => b.lastAssignmentDate.getTime() - a.lastAssignmentDate.getTime());

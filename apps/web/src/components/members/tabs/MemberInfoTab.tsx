@@ -110,7 +110,7 @@ export const MemberInfoTab = forwardRef<MemberInfoTabRef, MemberInfoTabProps>(
       if (!formData.managerId) return null;
       const found = managersWithCurrent.find((m) => m.id === formData.managerId);
       if (found) return `${found.firstName} ${found.lastName}`;
-      if (member.manager && member.manager.id === formData.managerId) {
+      if (member.manager?.id === formData.managerId) {
         return `${member.manager.firstName} ${member.manager.lastName}`;
       }
       return null;

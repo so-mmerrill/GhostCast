@@ -5,6 +5,7 @@ import { useToast } from '@/hooks/use-toast';
 import { MemberCreateInput } from '@ghostcast/shared';
 import { upsertMemberInCache, type CalendarMember } from '@/lib/schedule-cache';
 import { sanitizeInput, VALIDATION } from '@/lib/input-validation';
+import { usePaginatedSearch } from '@/hooks/use-paginated-search';
 import {
   Dialog,
   DialogContent,
@@ -16,8 +17,10 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Loader2, Clock, ChevronDown, ChevronUp } from 'lucide-react';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
+import { cn } from '@/lib/utils';
+import { Mail, Phone, Building2, User, Users, ChevronsUpDown, Check, Loader2 } from 'lucide-react';
 
 interface CreateMemberModalProps {
   open: boolean;
@@ -25,43 +28,11 @@ interface CreateMemberModalProps {
   onSuccess?: () => void;
 }
 
-interface DayHours {
-  enabled: boolean;
-  start: string;
-  end: string;
+interface MemberOption {
+  id: string;
+  firstName: string;
+  lastName: string;
 }
-
-interface WorkingHoursState {
-  mon: DayHours;
-  tue: DayHours;
-  wed: DayHours;
-  thu: DayHours;
-  fri: DayHours;
-  sat: DayHours;
-  sun: DayHours;
-}
-
-const defaultDayHours: DayHours = { enabled: false, start: '09:00', end: '17:00' };
-
-const dayLabels: Record<keyof WorkingHoursState, string> = {
-  mon: 'Monday',
-  tue: 'Tuesday',
-  wed: 'Wednesday',
-  thu: 'Thursday',
-  fri: 'Friday',
-  sat: 'Saturday',
-  sun: 'Sunday',
-};
-
-const initialWorkingHours: WorkingHoursState = {
-  mon: { ...defaultDayHours },
-  tue: { ...defaultDayHours },
-  wed: { ...defaultDayHours },
-  thu: { ...defaultDayHours },
-  fri: { ...defaultDayHours },
-  sat: { ...defaultDayHours },
-  sun: { ...defaultDayHours },
-};
 
 export function CreateMemberModal({
   open,
@@ -73,52 +44,50 @@ export function CreateMemberModal({
 
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
-  const [employeeId, setEmployeeId] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
+  const [position, setPosition] = useState('');
   const [department, setDepartment] = useState('');
-  const [workingHours, setWorkingHours] = useState<WorkingHoursState>(initialWorkingHours);
-  const [showWorkingHours, setShowWorkingHours] = useState(false);
+  const [managerId, setManagerId] = useState('');
+  const [managerOpen, setManagerOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const isValid = firstName.trim() !== '' && lastName.trim() !== '';
 
+  const {
+    items: managersRaw,
+    search: managerSearch,
+    setSearch: setManagerSearch,
+  } = usePaginatedSearch<MemberOption & { isActive?: boolean }>({
+    endpoint: '/members',
+    queryKey: 'members-manager-search-create',
+    pageSize: 50,
+    extraParams: { memberStatus: 'active' },
+    enabled: open,
+  });
+
+  const selectedManagerName = (() => {
+    if (!managerId) return null;
+    const found = managersRaw.find((m) => m.id === managerId);
+    if (found) return `${found.firstName} ${found.lastName}`;
+    return null;
+  })();
+
   const resetForm = () => {
     setFirstName('');
     setLastName('');
-    setEmployeeId('');
     setEmail('');
     setPhone('');
+    setPosition('');
     setDepartment('');
-    setWorkingHours(initialWorkingHours);
-    setShowWorkingHours(false);
-  };
+    setManagerId('');
+};
 
   const handleClose = (open: boolean) => {
     if (!open) {
       resetForm();
     }
     onOpenChange(open);
-  };
-
-  const updateDayHours = (day: keyof WorkingHoursState, field: keyof DayHours, value: boolean | string) => {
-    setWorkingHours((prev) => ({
-      ...prev,
-      [day]: { ...prev[day], [field]: value },
-    }));
-  };
-
-  const buildWorkingHoursPayload = () => {
-    const result: Record<string, { start: string; end: string }> = {};
-    (Object.keys(workingHours) as (keyof WorkingHoursState)[]).forEach((day) => {
-      if (workingHours[day].enabled) {
-        result[day] = {
-          start: workingHours[day].start,
-          end: workingHours[day].end,
-        };
-      }
-    });
-    return Object.keys(result).length > 0 ? result : undefined;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -130,11 +99,11 @@ export function CreateMemberModal({
       const payload: MemberCreateInput = {
         firstName: firstName.trim(),
         lastName: lastName.trim(),
-        ...(employeeId.trim() && { employeeId: employeeId.trim() }),
         ...(email.trim() && { email: email.trim() }),
         ...(phone.trim() && { phone: phone.trim() }),
+        ...(position.trim() && { position: position.trim() }),
         ...(department.trim() && { department: department.trim() }),
-        workingHours: buildWorkingHoursPayload(),
+        ...(managerId && { managerId }),
       };
 
       const response = await api.post<{ data: CalendarMember }>('/members', payload);
@@ -171,12 +140,15 @@ export function CreateMemberModal({
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Name Fields */}
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {/* First Name */}
             <div className="space-y-2">
-              <Label htmlFor="firstName">First Name *</Label>
+              <Label htmlFor="create-firstName" className="flex items-center gap-2">
+                <User className="h-4 w-4 text-muted-foreground" />
+                First Name *
+              </Label>
               <Input
-                id="firstName"
+                id="create-firstName"
                 value={firstName}
                 onChange={(e) => setFirstName(sanitizeInput(e.target.value, VALIDATION.NAME_MAX_LENGTH))}
                 placeholder="John"
@@ -184,10 +156,15 @@ export function CreateMemberModal({
                 required
               />
             </div>
+
+            {/* Last Name */}
             <div className="space-y-2">
-              <Label htmlFor="lastName">Last Name *</Label>
+              <Label htmlFor="create-lastName" className="flex items-center gap-2">
+                <User className="h-4 w-4 text-muted-foreground" />
+                Last Name *
+              </Label>
               <Input
-                id="lastName"
+                id="create-lastName"
                 value={lastName}
                 onChange={(e) => setLastName(sanitizeInput(e.target.value, VALIDATION.NAME_MAX_LENGTH))}
                 placeholder="Doe"
@@ -195,14 +172,15 @@ export function CreateMemberModal({
                 required
               />
             </div>
-          </div>
 
-          {/* Contact Fields */}
-          <div className="grid grid-cols-2 gap-4">
+            {/* Email */}
             <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
+              <Label htmlFor="create-email" className="flex items-center gap-2">
+                <Mail className="h-4 w-4 text-muted-foreground" />
+                Email
+              </Label>
               <Input
-                id="email"
+                id="create-email"
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value.slice(0, VALIDATION.EMAIL_MAX_LENGTH))}
@@ -210,10 +188,15 @@ export function CreateMemberModal({
                 maxLength={VALIDATION.EMAIL_MAX_LENGTH}
               />
             </div>
+
+            {/* Phone */}
             <div className="space-y-2">
-              <Label htmlFor="phone">Phone</Label>
+              <Label htmlFor="create-phone" className="flex items-center gap-2">
+                <Phone className="h-4 w-4 text-muted-foreground" />
+                Phone
+              </Label>
               <Input
-                id="phone"
+                id="create-phone"
                 type="tel"
                 value={phone}
                 onChange={(e) => setPhone(e.target.value.slice(0, 50))}
@@ -221,91 +204,96 @@ export function CreateMemberModal({
                 maxLength={50}
               />
             </div>
-          </div>
 
-          {/* Employment Details */}
-          <div className="grid grid-cols-2 gap-4">
+            {/* Position */}
             <div className="space-y-2">
-              <Label htmlFor="employeeId">Employee ID</Label>
+              <Label htmlFor="create-position" className="flex items-center gap-2">
+                <Building2 className="h-4 w-4 text-muted-foreground" />
+                Position
+              </Label>
               <Input
-                id="employeeId"
-                value={employeeId}
-                onChange={(e) => setEmployeeId(sanitizeInput(e.target.value, VALIDATION.NAME_MAX_LENGTH))}
-                placeholder="EMP001"
+                id="create-position"
+                value={position}
+                onChange={(e) => setPosition(sanitizeInput(e.target.value, VALIDATION.NAME_MAX_LENGTH))}
+                placeholder="Job title"
                 maxLength={VALIDATION.NAME_MAX_LENGTH}
               />
             </div>
+
+            {/* Department */}
             <div className="space-y-2">
-              <Label htmlFor="department">Department</Label>
+              <Label htmlFor="create-department" className="flex items-center gap-2">
+                <Building2 className="h-4 w-4 text-muted-foreground" />
+                Department
+              </Label>
               <Input
-                id="department"
+                id="create-department"
                 value={department}
                 onChange={(e) => setDepartment(sanitizeInput(e.target.value, VALIDATION.NAME_MAX_LENGTH))}
-                placeholder="Engineering"
+                placeholder="Department name"
                 maxLength={VALIDATION.NAME_MAX_LENGTH}
               />
             </div>
-          </div>
 
-          {/* Working Hours Section */}
-          <div className="border rounded-lg">
-            <button
-              type="button"
-              onClick={() => setShowWorkingHours(!showWorkingHours)}
-              className="flex w-full items-center justify-between p-4 text-left hover:bg-muted/50 rounded-lg transition-colors"
-            >
-              <div className="flex items-center gap-2">
-                <Clock className="h-4 w-4 text-muted-foreground" />
-                <span className="font-medium">Working Hours</span>
-                <span className="text-sm text-muted-foreground">(Optional)</span>
-              </div>
-              {showWorkingHours ? (
-                <ChevronUp className="h-4 w-4 text-muted-foreground" />
-              ) : (
-                <ChevronDown className="h-4 w-4 text-muted-foreground" />
-              )}
-            </button>
+            {/* Manager */}
+            <div className="space-y-2">
+              <Label className="flex items-center gap-2">
+                <Users className="h-4 w-4 text-muted-foreground" />
+                Manager
+              </Label>
+              <Popover open={managerOpen} onOpenChange={setManagerOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    role="combobox"
+                    aria-expanded={managerOpen}
+                    className="w-full justify-between font-normal"
+                    type="button"
+                  >
+                    {selectedManagerName ?? 'Select manager...'}
+                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[250px] p-0" align="start">
+                  <Command shouldFilter={false}>
+                    <CommandInput
+                      placeholder="Search members..."
+                      value={managerSearch}
+                      onValueChange={setManagerSearch}
+                    />
+                    <CommandList>
+                      <CommandEmpty>No member found.</CommandEmpty>
+                      <CommandGroup>
+                        <CommandItem
+                          value="none"
+                          onSelect={() => {
+                            setManagerId('');
+                            setManagerOpen(false);
+                          }}
+                        >
+                          <Check className={cn('mr-2 h-4 w-4', managerId ? 'opacity-0' : 'opacity-100')} />
+                          None
+                        </CommandItem>
+                        {managersRaw.map((m) => (
+                          <CommandItem
+                            key={m.id}
+                            value={m.id}
+                            onSelect={() => {
+                              setManagerId(m.id);
+                              setManagerOpen(false);
+                            }}
+                          >
+                            <Check className={cn('mr-2 h-4 w-4', managerId === m.id ? 'opacity-100' : 'opacity-0')} />
+                            {m.firstName} {m.lastName}
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
+            </div>
 
-            {showWorkingHours && (
-              <div className="px-4 pb-4 space-y-3">
-                {(Object.keys(dayLabels) as (keyof WorkingHoursState)[]).map((day) => (
-                  <div key={day} className="flex items-center gap-4">
-                    <div className="flex items-center gap-2 w-28">
-                      <Checkbox
-                        id={`${day}-enabled`}
-                        checked={workingHours[day].enabled}
-                        onCheckedChange={(checked) =>
-                          updateDayHours(day, 'enabled', checked === true)
-                        }
-                      />
-                      <Label
-                        htmlFor={`${day}-enabled`}
-                        className="text-sm font-normal cursor-pointer"
-                      >
-                        {dayLabels[day]}
-                      </Label>
-                    </div>
-                    {workingHours[day].enabled && (
-                      <div className="flex items-center gap-2 flex-1">
-                        <Input
-                          type="time"
-                          value={workingHours[day].start}
-                          onChange={(e) => updateDayHours(day, 'start', e.target.value)}
-                          className="w-32"
-                        />
-                        <span className="text-sm text-muted-foreground">to</span>
-                        <Input
-                          type="time"
-                          value={workingHours[day].end}
-                          onChange={(e) => updateDayHours(day, 'end', e.target.value)}
-                          className="w-32"
-                        />
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
           </div>
 
           <DialogFooter>

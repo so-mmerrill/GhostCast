@@ -8,7 +8,6 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { format } from 'date-fns';
 
 interface ProjectTypeStat {
   projectTypeId: string;
@@ -16,6 +15,7 @@ interface ProjectTypeStat {
   projectTypeColor: string;
   projectTypeAbbreviation: string | null;
   count: number;
+  days: number;
   lastAssignmentDate: string;
 }
 
@@ -67,7 +67,8 @@ export function MemberStatsTab({ memberId }: Readonly<MemberStatsTabProps>) {
         <TableHeader>
           <TableRow>
             <TableHead>Project Type</TableHead>
-            <TableHead className="text-center w-[80px]">Count</TableHead>
+            <TableHead className="text-center w-[80px]">Assignments</TableHead>
+            <TableHead className="text-center w-[80px]">Days</TableHead>
             <TableHead className="w-[140px]">Last Assignment</TableHead>
           </TableRow>
         </TableHeader>
@@ -91,8 +92,11 @@ export function MemberStatsTab({ memberId }: Readonly<MemberStatsTabProps>) {
               <TableCell className="text-center font-semibold">
                 {stat.count}
               </TableCell>
+              <TableCell className="text-center font-semibold">
+                {stat.days}
+              </TableCell>
               <TableCell className="text-muted-foreground">
-                {format(new Date(stat.lastAssignmentDate), 'MMM d, yyyy')}
+                {new Date(stat.lastAssignmentDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' })}
               </TableCell>
             </TableRow>
           ))}
