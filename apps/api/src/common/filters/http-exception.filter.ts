@@ -45,11 +45,12 @@ export class HttpExceptionFilter implements ExceptionFilter {
         details = responseObj.details;
       }
     } else if (exception instanceof Error) {
-      message = exception.message;
       this.logger.error(
         `Unhandled exception: ${exception.message}`,
         exception.stack
       );
+    } else {
+      this.logger.error('Unhandled non-Error exception', exception);
     }
 
     const errorResponse: ErrorResponse = {
