@@ -330,13 +330,12 @@ export class MembersService {
   async getMemberAssignmentStats(memberId: string) {
     await this.findById(memberId); // Verify member exists
 
-    const oneYearAgo = new Date();
-    oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+    const startOfYear = new Date(new Date().getFullYear(), 0, 1);
 
     const assignments = await this.prisma.assignment.findMany({
       where: {
         members: { some: { memberId } },
-        startDate: { gte: oneYearAgo },
+        startDate: { gte: startOfYear },
       },
       include: {
         projectType: true,

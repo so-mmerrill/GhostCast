@@ -109,7 +109,7 @@ export function MemberStatsTab({ memberId }: Readonly<MemberStatsTabProps>) {
           Linked Requests
         </h3>
         <p className="text-xs text-muted-foreground mb-3">
-          Unique requests by project type (last 12 months)
+          Unique requests by project type (current year)
         </p>
         {renderStatsTable(
           stats?.linkedRequests || [],
@@ -123,7 +123,7 @@ export function MemberStatsTab({ memberId }: Readonly<MemberStatsTabProps>) {
           No Linked Request
         </h3>
         <p className="text-xs text-muted-foreground mb-3">
-          Assignments without linked requests (last 12 months)
+          Assignments without linked requests (current year)
         </p>
         {renderStatsTable(
           stats?.noLinkedRequest || [],
