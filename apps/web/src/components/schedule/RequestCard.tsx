@@ -1,6 +1,6 @@
 import { format } from 'date-fns';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { Clock4, CalendarCheck, TrendingUp, Highlighter } from 'lucide-react';
+import { Clock4, CalendarCheck, TrendingUp, Highlighter, Ban } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -66,6 +66,7 @@ const STATUS_OPTIONS = [
   { value: RequestStatus.UNSCHEDULED, label: 'Unscheduled', icon: Clock4, color: 'text-foreground' },
   { value: RequestStatus.FORECAST, label: 'Forecast', icon: TrendingUp, color: 'text-yellow-400' },
   { value: RequestStatus.SCHEDULED, label: 'Scheduled', icon: CalendarCheck, color: 'text-emerald-500' },
+  { value: RequestStatus.CANCELLED, label: 'Cancelled', icon: Ban, color: 'text-red-500' },
 ];
 
 export function RequestCard({ request, onClick, isSelected, actions, onHighlight, isHighlighted }: Readonly<RequestCardProps>) {
@@ -77,13 +78,20 @@ export function RequestCard({ request, onClick, isSelected, actions, onHighlight
       return api.put(`/requests/${request.id}`, { status: newStatus });
     },
     onSuccess: (_data, newStatus) => {
-      // Update only linked assignments in the schedule cache (no full calendar refetch)
-      updateRequestStatusInCache(queryClient, request.id, newStatus);
+      if (newStatus === RequestStatus.CANCELLED) {
+        // Assignments were deleted server-side — refresh the schedule to remove them
+        queryClient.invalidateQueries({ queryKey: ['schedule'], refetchType: 'all' });
+      } else {
+        // Update only linked assignments in the schedule cache (no full calendar refetch)
+        updateRequestStatusInCache(queryClient, request.id, newStatus);
+      }
       // Move the request card between status sections (remove from old, refetch target only)
       updateRequestStatusInPaginatedCache(queryClient, request.id, newStatus);
       toast({
         title: 'Status updated',
-        description: 'Request status has been updated.',
+        description: newStatus === RequestStatus.CANCELLED
+          ? 'Request cancelled and assignments removed.'
+          : 'Request status has been updated.',
       });
     },
     onError: (error: Error) => {

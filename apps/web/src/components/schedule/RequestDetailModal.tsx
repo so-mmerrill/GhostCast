@@ -13,6 +13,7 @@ import {
   CalendarCheck,
   TrendingUp,
   Trash2,
+  Ban,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { api } from '@/lib/api';
@@ -122,6 +123,12 @@ const STATUS_CONFIG = {
     color: 'text-white',
     bgColor: '', // Will use project type color
     label: 'Scheduled',
+  },
+  [RequestStatus.CANCELLED]: {
+    icon: Ban,
+    color: 'text-white',
+    bgColor: 'bg-red-500 dark:bg-red-600 border border-red-600 dark:border-red-500',
+    label: 'Cancelled',
   },
 };
 

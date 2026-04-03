@@ -4,7 +4,7 @@ import { CreateRequestDto } from './dto/create-request.dto';
 import { UpdateRequestDto } from './dto/update-request.dto';
 import { QueryRequestDto } from './dto/query-request.dto';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
-import { WebSocketEvent } from '@ghostcast/shared';
+import { WebSocketEvent, RequestStatus } from '@ghostcast/shared';
 
 const requestInclude = {
   requester: {
@@ -224,6 +224,30 @@ export class RequestsService {
       requestData.projectTypeId !== undefined &&
       requestData.projectTypeId !== existingRequest.projectTypeId;
 
+    const isCancelling =
+      requestData.status === RequestStatus.CANCELLED &&
+      existingRequest.status !== RequestStatus.CANCELLED;
+
+    // Collect assignment info before deletion so we can emit proper WebSocket events
+    let deletedAssignments: Array<{ id: string; startDate: Date; endDate: Date; memberIds: string[] }> = [];
+    if (isCancelling) {
+      const assignments = await this.prisma.assignment.findMany({
+        where: { requestId: id },
+        select: {
+          id: true,
+          startDate: true,
+          endDate: true,
+          members: { select: { memberId: true } },
+        },
+      });
+      deletedAssignments = assignments.map((a) => ({
+        id: a.id,
+        startDate: a.startDate,
+        endDate: a.endDate,
+        memberIds: a.members.map((m) => m.memberId),
+      }));
+    }
+
     const request = await this.prisma.$transaction(async (tx) => {
       // Update member relations if provided
       if (memberIds !== undefined) {
@@ -257,6 +281,13 @@ export class RequestsService {
         });
       }
 
+      // Delete all linked assignments when cancelling
+      if (isCancelling) {
+        await tx.assignment.deleteMany({
+          where: { requestId: id },
+        });
+      }
+
       // Update request
       return tx.request.update({
         where: { id },
@@ -264,6 +295,11 @@ export class RequestsService {
         include: requestInclude,
       });
     });
+
+    // Emit deletion events for each assignment so clients remove them from schedule caches
+    for (const assignment of deletedAssignments) {
+      this.realtimeGateway.emitToAll(WebSocketEvent.ASSIGNMENT_DELETED, assignment);
+    }
 
     this.realtimeGateway.emitToAll(WebSocketEvent.REQUEST_UPDATED, request);
 

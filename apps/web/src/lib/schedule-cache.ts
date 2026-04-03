@@ -315,6 +315,10 @@ export function updateRequestStatusInPaginatedCache(
   if (newStatus === 'SCHEDULED') {
     queryClient.invalidateQueries({ queryKey: ['requests-paginated', 'scheduled-monthly'], refetchType: 'all' });
   }
+  // Cancelled requests have their assignments deleted server-side — refresh the schedule
+  if (newStatus === 'CANCELLED') {
+    queryClient.invalidateQueries({ queryKey: ['schedule'], refetchType: 'all' });
+  }
 }
 
 /**

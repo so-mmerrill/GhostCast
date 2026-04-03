@@ -505,6 +505,7 @@ export enum RequestStatus {
   UNSCHEDULED = 'UNSCHEDULED',
   SCHEDULED = 'SCHEDULED',
   FORECAST = 'FORECAST',
+  CANCELLED = 'CANCELLED',
 }
 
 export interface RequestMember {

@@ -137,6 +137,7 @@ const STATUS_OPTIONS = [
   { value: RequestStatus.UNSCHEDULED, label: 'Unscheduled' },
   { value: RequestStatus.SCHEDULED, label: 'Scheduled' },
   { value: RequestStatus.FORECAST, label: 'Forecast' },
+  { value: RequestStatus.CANCELLED, label: 'Cancelled' },
 ];
 
 // Sub-component for member selection to reduce main component complexity

@@ -109,12 +109,14 @@ const STATUS_BADGE_VARIANTS: Record<RequestStatus, 'default' | 'secondary' | 'de
   [RequestStatus.UNSCHEDULED]: 'warning',
   [RequestStatus.SCHEDULED]: 'success',
   [RequestStatus.FORECAST]: 'info',
+  [RequestStatus.CANCELLED]: 'destructive',
 };
 
 const STATUS_LABELS: Record<RequestStatus, string> = {
   [RequestStatus.UNSCHEDULED]: 'Unscheduled',
   [RequestStatus.SCHEDULED]: 'Scheduled',
   [RequestStatus.FORECAST]: 'Forecast',
+  [RequestStatus.CANCELLED]: 'Cancelled',
 };
 
 interface SortIconProps {
@@ -384,6 +386,7 @@ export function RequestsTable({ onNewRequest }: Readonly<RequestsTableProps>) {
               <SelectItem value={RequestStatus.UNSCHEDULED}>Unscheduled</SelectItem>
               <SelectItem value={RequestStatus.SCHEDULED}>Scheduled</SelectItem>
               <SelectItem value={RequestStatus.FORECAST}>Forecast</SelectItem>
+              <SelectItem value={RequestStatus.CANCELLED}>Cancelled</SelectItem>
             </SelectContent>
           </Select>
 
