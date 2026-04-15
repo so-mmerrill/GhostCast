@@ -100,12 +100,6 @@ export const MONTHS_SHORT = [
   'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
 ] as const;
 
-export const QUARTERS = [
-  { name: 'Q1', months: [0, 1, 2] },
-  { name: 'Q2', months: [3, 4, 5] },
-  { name: 'Q3', months: [6, 7, 8] },
-  { name: 'Q4', months: [9, 10, 11] },
-] as const;
 
 // Work week days (Monday = 1, Friday = 5)
 export const WORK_WEEK_START = 1;
@@ -203,17 +197,6 @@ export const DEFAULTS = {
   SKILL_LEVEL_MAX: 5,
   TOKEN_EXPIRES_IN: '15m',
   REFRESH_TOKEN_EXPIRES_IN: '7d',
-} as const;
-
-// ===========================================
-// Status Colors
-// ===========================================
-
-export const STATUS_COLORS = {
-  SCHEDULED: '#3B82F6', // Blue
-  IN_PROGRESS: '#F59E0B', // Amber
-  COMPLETED: '#10B981', // Green
-  CANCELLED: '#6B7280', // Gray
 } as const;
 
 // Request status colors for assignment display

@@ -61,39 +61,37 @@ export class AuditInterceptor implements NestInterceptor {
     return from(preMutationPromise).pipe(
       switchMap((preMutationEntity) => next.handle().pipe(
       tap({
-        next: async (responseData) => {
-          try {
-            const action = auditOptions?.action || this.getActionFromMethod(method);
-            const entity = auditOptions?.entity || this.getEntityFromPath(request.path);
-            const entityId = requestParams?.id || (responseData as Record<string, unknown>)?.id;
+        next: (responseData) => {
+          const action = auditOptions?.action || this.getActionFromMethod(method);
+          const entity = auditOptions?.entity || this.getEntityFromPath(request.path);
+          const entityId = requestParams?.id || (responseData as Record<string, unknown>)?.id;
 
-            const entityName = this.extractEntityName(
-              method === 'DELETE' ? preMutationEntity : responseData,
+          const entityName = this.extractEntityName(
+            method === 'DELETE' ? preMutationEntity : responseData,
+            entity,
+          );
+
+          this.prisma.auditLog.create({
+            data: {
+              userId: user?.id,
+              action,
               entity,
-            );
-
-            const auditLog = await this.prisma.auditLog.create({
-              data: {
-                userId: user?.id,
-                action,
-                entity,
-                entityId,
-                oldValue: preMutationEntity
-                  ? this.sanitizeData(preMutationEntity) as object
-                  : undefined,
-                newValue: this.sanitizeData(responseData) as object,
-                ipAddress: this.getClientIp(request),
-                userAgent: request.headers['user-agent'],
-                metadata: {
-                  method,
-                  path: request.path,
-                  duration: Date.now() - startTime,
-                  requestBody: this.sanitizeData(requestBody) as object,
-                  entityName,
-                },
+              entityId,
+              oldValue: preMutationEntity
+                ? this.sanitizeData(preMutationEntity) as object
+                : undefined,
+              newValue: this.sanitizeData(responseData) as object,
+              ipAddress: this.getClientIp(request),
+              userAgent: request.headers['user-agent'],
+              metadata: {
+                method,
+                path: request.path,
+                duration: Date.now() - startTime,
+                requestBody: this.sanitizeData(requestBody) as object,
+                entityName,
               },
-            });
-
+            },
+          }).then((auditLog) => {
             // Emit audit event for extensions to consume
             this.auditEventEmitter.emit(auditLog, {
               requestId: uuidv4(),
@@ -103,34 +101,32 @@ export class AuditInterceptor implements NestInterceptor {
               userName: user ? `${user.firstName} ${user.lastName}` : undefined,
               metadata: { method, path: request.path },
             });
-          } catch (error) {
+          }).catch((error) => {
             this.logger.error('Failed to create audit log', error);
-          }
+          });
         },
-        error: async (error) => {
-          try {
-            const action = auditOptions?.action || this.getActionFromMethod(method);
-            const entity = auditOptions?.entity || this.getEntityFromPath(request.path);
+        error: (error) => {
+          const action = auditOptions?.action || this.getActionFromMethod(method);
+          const entity = auditOptions?.entity || this.getEntityFromPath(request.path);
 
-            await this.prisma.auditLog.create({
-              data: {
-                userId: user?.id,
-                action: `${action}_FAILED`,
-                entity,
-                entityId: requestParams?.id,
-                ipAddress: this.getClientIp(request),
-                userAgent: request.headers['user-agent'],
-                metadata: {
-                  method,
-                  path: request.path,
-                  duration: Date.now() - startTime,
-                  error: error.message,
-                } as object,
-              },
-            });
-          } catch (auditError) {
+          this.prisma.auditLog.create({
+            data: {
+              userId: user?.id,
+              action: `${action}_FAILED`,
+              entity,
+              entityId: requestParams?.id,
+              ipAddress: this.getClientIp(request),
+              userAgent: request.headers['user-agent'],
+              metadata: {
+                method,
+                path: request.path,
+                duration: Date.now() - startTime,
+                error: error.message,
+              } as object,
+            },
+          }).catch((auditError) => {
             this.logger.error('Failed to create audit log for error', auditError);
-          }
+          });
         },
       })
     )));
@@ -192,7 +188,7 @@ export class AuditInterceptor implements NestInterceptor {
     // Extract entity from path like /api/users/123 -> User
     const parts = path.split('/').filter(Boolean);
     const entityPart = parts.find(
-      (p) => p !== 'api' && !p.match(/^[a-z0-9-]+$/i)
+      (p) => p !== 'api' && !/^[a-z0-9-]+$/i.exec(p)
     ) || parts[1];
 
     if (!entityPart) return 'Unknown';
