@@ -2965,6 +2965,13 @@ export function ScheduleView({ zoomLevel, onZoomIn, onZoomOut, onZoomReset }: Re
                   </div>
                 );
               })}
+              {sortedMemberItems.length > 0 && (
+                <div
+                  className="border-b bg-background"
+                  style={{ height: zoomedRowHeight }}
+                  aria-hidden="true"
+                />
+              )}
               </div>
               {/* Column resize handle */}
               <button
@@ -2990,7 +2997,7 @@ export function ScheduleView({ zoomLevel, onZoomIn, onZoomOut, onZoomReset }: Re
               className="grid min-h-full"
               style={{
                 gridTemplateColumns: `repeat(${weekdays.length}, ${colWidth}px)`,
-                gridTemplateRows: `32px 24px 48px ${sortedMemberItems.length > 0 ? sortedMemberItems.map(item => item.type === 'department' ? deptHeaderHeight + 'px' : zoomedRowHeight + 'px').join(' ') : ''} 1fr`,
+                gridTemplateRows: `32px 24px 48px ${sortedMemberItems.length > 0 ? sortedMemberItems.map(item => item.type === 'department' ? deptHeaderHeight + 'px' : zoomedRowHeight + 'px').join(' ') + ' ' + zoomedRowHeight + 'px' : ''} 1fr`,
                 minWidth: 'max-content',
               } as CSSProperties}
             >
@@ -3178,6 +3185,17 @@ export function ScheduleView({ zoomLevel, onZoomIn, onZoomOut, onZoomReset }: Re
                 />
               );
             })}
+
+            {sortedMemberItems.length > 0 && (
+              <div
+                className="border-b"
+                style={{
+                  gridRow: 4 + sortedMemberItems.length,
+                  gridColumn: `1 / span ${weekdays.length}`,
+                }}
+                aria-hidden="true"
+              />
+            )}
 
             {/* Spacer row to fill remaining height */}
             <div
