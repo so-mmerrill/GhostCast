@@ -126,6 +126,8 @@ const STATUS_OPTIONS = [
   { value: RequestStatus.CANCELLED, label: 'Cancelled' },
 ];
 
+const wheelAttached = new WeakSet<HTMLElement>();
+
 export function CreateRequestModal({
   open,
   onOpenChange,
@@ -176,6 +178,23 @@ export function CreateRequestModal({
 
   // QUIP import state
   const [quipBrowserOpen, setQuipBrowserOpen] = useState(false);
+
+  // react-remove-scroll (used by Radix Dialog) preventDefaults wheel events
+  // outside its subtree, which kills scrolling on portaled Popover content.
+  // Bypass it with a native non-passive listener that scrolls the list manually.
+  const attachPopoverListWheel = (el: HTMLDivElement | null) => {
+    if (!el || wheelAttached.has(el)) return;
+    wheelAttached.add(el);
+    el.addEventListener(
+      'wheel',
+      (e) => {
+        el.scrollTop += e.deltaY;
+        if (e.cancelable) e.preventDefault();
+        e.stopPropagation();
+      },
+      { passive: false },
+    );
+  };
 
   // Check if Quip plugin is enabled for the user
   const { data: userPlugins = [] } = useQuery({
@@ -619,7 +638,7 @@ export function CreateRequestModal({
                         value={projectTypeSearch}
                         onValueChange={setProjectTypeSearch}
                       />
-                      <CommandList>
+                      <CommandList className="scrollbar-on-hover" ref={attachPopoverListWheel}>
                         <CommandEmpty>No project type found.</CommandEmpty>
                         <CommandGroup>
                           {filteredProjectTypes.map((pt) => (
@@ -794,13 +813,13 @@ export function CreateRequestModal({
                         </Button>
                       </PopoverTrigger>
                       <PopoverContent className="w-[350px] p-0" align="start">
-                        <Command>
+                        <Command shouldFilter={false}>
                           <CommandInput
                             placeholder="Search timezones..."
                             value={timezoneSearch}
                             onValueChange={setTimezoneSearch}
                           />
-                          <CommandList>
+                          <CommandList className="scrollbar-on-hover" ref={attachPopoverListWheel}>
                             <CommandEmpty>No timezone found.</CommandEmpty>
                             <CommandGroup>
                               {filteredTimezones.map((tz) => (
@@ -1040,7 +1059,7 @@ export function CreateRequestModal({
                               value={memberSearch}
                               onValueChange={setMemberSearch}
                             />
-                            <CommandList>
+                            <CommandList className="scrollbar-on-hover" ref={attachPopoverListWheel}>
                               <CommandEmpty>No member found.</CommandEmpty>
                               <CommandGroup>
                                 {filteredMembers.map((member) => {
@@ -1121,7 +1140,7 @@ export function CreateRequestModal({
                             value={skillSearch}
                             onValueChange={setSkillSearch}
                           />
-                          <CommandList>
+                          <CommandList className="scrollbar-on-hover" ref={attachPopoverListWheel}>
                             <CommandEmpty>No skill found.</CommandEmpty>
                             <CommandGroup>
                               {filteredSkills.map((skill) => {
