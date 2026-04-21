@@ -2967,7 +2967,7 @@ export function ScheduleView({ zoomLevel, onZoomIn, onZoomOut, onZoomReset }: Re
               })}
               {sortedMemberItems.length > 0 && (
                 <div
-                  className="border-b bg-background"
+                  className="sticky bottom-0 border-t bg-background"
                   style={{ height: zoomedRowHeight }}
                   aria-hidden="true"
                 />
@@ -3188,7 +3188,7 @@ export function ScheduleView({ zoomLevel, onZoomIn, onZoomOut, onZoomReset }: Re
 
             {sortedMemberItems.length > 0 && (
               <div
-                className="border-b"
+                className="sticky bottom-0 z-10 border-t bg-background"
                 style={{
                   gridRow: 4 + sortedMemberItems.length,
                   gridColumn: `1 / span ${weekdays.length}`,
