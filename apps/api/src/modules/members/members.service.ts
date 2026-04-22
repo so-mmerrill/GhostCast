@@ -331,6 +331,7 @@ export class MembersService {
     await this.findById(memberId); // Verify member exists
 
     const startOfYear = new Date(new Date().getFullYear(), 0, 1);
+    const now = new Date();
 
     const assignments = await this.prisma.assignment.findMany({
       where: {
@@ -348,9 +349,13 @@ export class MembersService {
       orderBy: { startDate: 'desc' },
     });
 
-    // Separate into linked (has request) and unlinked (no request)
-    const linkedAssignments = assignments.filter((a) => a.requestId !== null);
-    const unlinkedAssignments = assignments.filter((a) => a.requestId === null);
+    // Separate future (scheduled) from past/current assignments
+    const scheduledAssignments = assignments.filter((a) => a.startDate > now);
+    const pastAssignments = assignments.filter((a) => a.startDate <= now);
+
+    // For past: split into linked (has request) and unlinked (no request)
+    const linkedAssignments = pastAssignments.filter((a) => a.requestId !== null);
+    const unlinkedAssignments = pastAssignments.filter((a) => a.requestId === null);
 
     // For linked: group by request's project type, count unique requests
     const linkedStats = this.groupByRequestProjectType(linkedAssignments);
@@ -358,10 +363,83 @@ export class MembersService {
     // For unlinked: group by assignment's project type
     const unlinkedStats = this.groupByAssignmentProjectType(unlinkedAssignments);
 
+    // For scheduled: group by project type (request's if linked, else assignment's),
+    // showing the next upcoming assignment date
+    const scheduledStats = this.groupScheduledAssignments(scheduledAssignments);
+
     return {
       linkedRequests: linkedStats,
       noLinkedRequest: unlinkedStats,
+      scheduledAssignments: scheduledStats,
     };
+  }
+
+  private groupScheduledAssignments(
+    assignments: Array<{
+      requestId: string | null;
+      projectTypeId: string;
+      startDate: Date;
+      endDate: Date;
+      projectType: {
+        id: string;
+        name: string;
+        color: string;
+        abbreviation: string | null;
+      };
+      request: {
+        id: string;
+        projectType: {
+          id: string;
+          name: string;
+          color: string;
+          abbreviation: string | null;
+        } | null;
+      } | null;
+    }>
+  ) {
+    const projectTypeMap = new Map<
+      string,
+      {
+        projectType: { id: string; name: string; color: string; abbreviation: string | null };
+        count: number;
+        totalDays: number;
+        nextDate: Date;
+      }
+    >();
+
+    for (const assignment of assignments) {
+      const projectType = assignment.request?.projectType ?? assignment.projectType;
+      if (!projectType) continue;
+
+      const days = this.calculateDays(assignment.startDate, assignment.endDate);
+      const existing = projectTypeMap.get(projectType.id);
+      if (existing) {
+        existing.count++;
+        existing.totalDays += days;
+        if (assignment.startDate < existing.nextDate) {
+          existing.nextDate = assignment.startDate;
+        }
+      } else {
+        projectTypeMap.set(projectType.id, {
+          projectType,
+          count: 1,
+          totalDays: days,
+          nextDate: assignment.startDate,
+        });
+      }
+    }
+
+    return Array.from(projectTypeMap.values())
+      .map((entry) => ({
+        projectTypeId: entry.projectType.id,
+        projectTypeName: entry.projectType.name,
+        projectTypeColor: entry.projectType.color,
+        projectTypeAbbreviation: entry.projectType.abbreviation,
+        count: entry.count,
+        days: entry.totalDays,
+        lastAssignmentDate: entry.nextDate,
+      }))
+      .sort((a, b) => a.lastAssignmentDate.getTime() - b.lastAssignmentDate.getTime());
   }
 
   private calculateDays(startDate: Date, endDate: Date): number {

@@ -22,6 +22,7 @@ interface ProjectTypeStat {
 interface MemberAssignmentStats {
   linkedRequests: ProjectTypeStat[];
   noLinkedRequest: ProjectTypeStat[];
+  scheduledAssignments: ProjectTypeStat[];
 }
 
 interface MemberStatsTabProps {
@@ -55,7 +56,11 @@ export function MemberStatsTab({ memberId }: Readonly<MemberStatsTabProps>) {
     );
   }
 
-  const renderStatsTable = (data: ProjectTypeStat[], emptyMessage: string) => {
+  const renderStatsTable = (
+    data: ProjectTypeStat[],
+    emptyMessage: string,
+    dateColumnLabel: string = 'Last Assignment'
+  ) => {
     if (data.length === 0) {
       return (
         <p className="text-sm text-muted-foreground py-4">{emptyMessage}</p>
@@ -69,7 +74,7 @@ export function MemberStatsTab({ memberId }: Readonly<MemberStatsTabProps>) {
             <TableHead>Project Type</TableHead>
             <TableHead className="text-center w-[80px]">Assignments</TableHead>
             <TableHead className="text-center w-[80px]">Days</TableHead>
-            <TableHead className="w-[140px]">Last Assignment</TableHead>
+            <TableHead className="w-[140px]">{dateColumnLabel}</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -132,6 +137,21 @@ export function MemberStatsTab({ memberId }: Readonly<MemberStatsTabProps>) {
         {renderStatsTable(
           stats?.noLinkedRequest || [],
           'No assignments without linked requests found.'
+        )}
+      </div>
+
+      {/* Scheduled Assignments Section */}
+      <div>
+        <h3 className="text-sm font-semibold mb-2 text-foreground">
+          Scheduled Assignments
+        </h3>
+        <p className="text-xs text-muted-foreground mb-3">
+          Upcoming assignments scheduled after today
+        </p>
+        {renderStatsTable(
+          stats?.scheduledAssignments || [],
+          'No upcoming scheduled assignments found.',
+          'Next Assignment'
         )}
       </div>
     </div>

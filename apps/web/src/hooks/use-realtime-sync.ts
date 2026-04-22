@@ -4,7 +4,7 @@ import { io, Socket } from 'socket.io-client';
 import { WebSocketEvent } from '@ghostcast/shared';
 import { api } from '@/lib/api';
 import { useAuth } from '@/features/auth/AuthProvider';
-import { upsertAssignmentInCache, removeAssignmentFromCache, updateRequestStatusInCache, updateRequestStatusInPaginatedCache, upsertMemberInCache, removeMemberFromCache, type CalendarMember } from '@/lib/schedule-cache';
+import { upsertAssignmentInCache, removeAssignmentFromCache, updateRequestStatusInCache, updateRequestStatusInPaginatedCache, updateRequestTitleInCache, upsertMemberInCache, removeMemberFromCache, type CalendarMember } from '@/lib/schedule-cache';
 
 const WS_URL = import.meta.env.VITE_WS_URL || undefined;
 
@@ -94,9 +94,10 @@ export function useRealtimeSync() {
       queryClient.invalidateQueries({ queryKey: ['schedule'], refetchType: 'all' });
     });
 
-    socket.on(WebSocketEvent.REQUEST_UPDATED, (payload?: { data?: { id?: string; status?: string } }) => {
+    socket.on(WebSocketEvent.REQUEST_UPDATED, (payload?: { data?: { id?: string; status?: string; title?: string } }) => {
       const requestId = payload?.data?.id;
       const requestStatus = payload?.data?.status;
+      const requestTitle = payload?.data?.title;
 
       // Update only linked assignments in schedule caches (no full calendar refetch)
       if (requestId && requestStatus) {
@@ -105,6 +106,11 @@ export function useRealtimeSync() {
       } else {
         // Non-status update — refresh all paginated request caches
         queryClient.invalidateQueries({ queryKey: ['requests-paginated'], refetchType: 'all' });
+      }
+
+      // Patch linked assignment titles in place when the request title changes
+      if (requestId && typeof requestTitle === 'string') {
+        updateRequestTitleInCache(queryClient, requestId, requestTitle);
       }
 
       queryClient.invalidateQueries({ queryKey: ['requests-for-assignment'], refetchType: 'all' });

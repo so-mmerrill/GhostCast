@@ -269,6 +269,48 @@ export function updateRequestStatusInCache(
 }
 
 /**
+ * Patches assignment.title (and assignment.request.title if present) on every
+ * assignment linked to a given request, across all active schedule caches.
+ * Direct cache write via setQueryData — no refetch, no API round-trip.
+ */
+export function updateRequestTitleInCache(
+  queryClient: QueryClient,
+  requestId: string,
+  newTitle: string
+): void {
+  const scheduleEntries = queryClient.getQueriesData<ScheduleData>({
+    queryKey: ['schedule'],
+  });
+
+  for (const [queryKey, cachedData] of scheduleEntries) {
+    if (!cachedData) continue;
+
+    const reqId = (a: Assignment) =>
+      (a.request as { id?: string } | undefined)?.id
+      ?? (a as { requestId?: string }).requestId;
+
+    const hasMatch = cachedData.data.assignments.some((a) => reqId(a) === requestId);
+    if (!hasMatch) continue;
+
+    queryClient.setQueryData(queryKey, {
+      ...cachedData,
+      data: {
+        ...cachedData.data,
+        assignments: cachedData.data.assignments.map((a) => {
+          if (reqId(a) !== requestId) return a;
+          const r = a.request as { title?: string } | undefined;
+          return {
+            ...a,
+            title: newTitle,
+            ...(r ? { request: { ...r, title: newTitle } } : {}),
+          };
+        }),
+      },
+    });
+  }
+}
+
+/**
  * Moves a request between paginated status sections by removing it from its
  * old cache and refetching only the target status cache.
  */

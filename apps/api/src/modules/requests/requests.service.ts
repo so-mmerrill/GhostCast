@@ -224,6 +224,10 @@ export class RequestsService {
       requestData.projectTypeId !== undefined &&
       requestData.projectTypeId !== existingRequest.projectTypeId;
 
+    const titleChanged =
+      requestData.title !== undefined &&
+      requestData.title !== existingRequest.title;
+
     const isCancelling =
       requestData.status === RequestStatus.CANCELLED &&
       existingRequest.status !== RequestStatus.CANCELLED;
@@ -281,6 +285,14 @@ export class RequestsService {
         });
       }
 
+      // If title changed, update all linked assignments
+      if (titleChanged && requestData.title !== undefined) {
+        await tx.assignment.updateMany({
+          where: { requestId: id },
+          data: { title: requestData.title },
+        });
+      }
+
       // Delete all linked assignments when cancelling
       if (isCancelling) {
         await tx.assignment.deleteMany({
@@ -304,7 +316,7 @@ export class RequestsService {
     this.realtimeGateway.emitToAll(WebSocketEvent.REQUEST_UPDATED, request);
 
     // If assignments were updated, notify clients to refresh assignment data
-    if (projectTypeChanged && requestData.projectTypeId) {
+    if ((projectTypeChanged && requestData.projectTypeId) || titleChanged) {
       this.realtimeGateway.emitToAll(WebSocketEvent.ASSIGNMENT_UPDATED, { requestId: id });
     }
 

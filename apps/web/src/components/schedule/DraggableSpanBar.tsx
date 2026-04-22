@@ -258,8 +258,6 @@ interface DraggableSpanBarProps {
   onDoubleClick?: (assignment: Assignment) => void;
   isSelected: boolean;
   isHighlighted?: boolean;
-  /** True when this bar falls within the current row/column selection */
-  isInSelection?: boolean;
   onDragStart: (data: DragData) => void;
   onDragEnd: () => void;
   isCut?: boolean;
@@ -283,7 +281,6 @@ function DraggableSpanBarInner({
   onDoubleClick,
   isSelected,
   isHighlighted = false,
-  isInSelection = false,
   onDragStart,
   onDragEnd,
   isCut = false,
@@ -388,9 +385,6 @@ function DraggableSpanBarInner({
         }}
         title={computeTooltipTitle(isHoliday, assignment, displayTitle)}
       >
-        {isInSelection && (
-          <div className="absolute inset-0 pointer-events-none bg-primary/20" />
-        )}
         {isLocked && !isHoliday && (
           <Lock className="shrink-0 h-3 w-3 ml-1 opacity-60" />
         )}
@@ -434,7 +428,6 @@ const PROP_COMPARE_KEYS: (keyof DraggableSpanBarProps)[] = [
   'memberId',
   'isSelected',
   'isHighlighted',
-  'isInSelection',
   'isCut',
   'zoomLevel',
   'onClick',

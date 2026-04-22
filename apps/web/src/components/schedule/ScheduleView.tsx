@@ -383,6 +383,65 @@ function assignLanesToSpans(spans: Omit<AssignmentSpan, 'lane' | 'totalLanes'>[]
   return result.map((span) => ({ ...span, totalLanes: maxLanes }));
 }
 
+interface SelectionBoxRange {
+  start: number;
+  end: number;
+}
+
+function computeContiguousRanges(indices: number[]): SelectionBoxRange[] {
+  if (indices.length === 0) return [];
+  const ranges: SelectionBoxRange[] = [];
+  let rangeStart = indices[0];
+  let rangeEnd = indices[0];
+  for (let i = 1; i < indices.length; i++) {
+    if (indices[i] === rangeEnd + 1) {
+      rangeEnd = indices[i];
+    } else {
+      ranges.push({ start: rangeStart, end: rangeEnd });
+      rangeStart = indices[i];
+      rangeEnd = indices[i];
+    }
+  }
+  ranges.push({ start: rangeStart, end: rangeEnd });
+  return ranges;
+}
+
+function computeSelectionBoxRanges(params: {
+  isMemberSelected: boolean;
+  isColumnSelection: boolean;
+  isThisMemberDragged: boolean;
+  selectedDays: Set<string>;
+  weekdayKeys: string[];
+  visibleStart: number;
+  visibleEnd: number;
+}): SelectionBoxRange[] {
+  const {
+    isMemberSelected,
+    isColumnSelection,
+    isThisMemberDragged,
+    selectedDays,
+    weekdayKeys,
+    visibleStart,
+    visibleEnd,
+  } = params;
+
+  if (isMemberSelected) {
+    return [{ start: visibleStart, end: visibleEnd }];
+  }
+
+  const inColumnMode = (isColumnSelection || isThisMemberDragged) && selectedDays.size > 0;
+  if (!inColumnMode) return [];
+
+  const selectedIndices: number[] = [];
+  for (let i = 0; i < weekdayKeys.length; i++) {
+    if (selectedDays.has(weekdayKeys[i])) selectedIndices.push(i);
+  }
+
+  return computeContiguousRanges(selectedIndices).filter(
+    (r) => r.end >= visibleStart && r.start <= visibleEnd
+  );
+}
+
 // --- MemberRow: extracted + memoized to isolate re-renders per row ---
 interface MemberRowProps {
   memberId: string;
@@ -501,6 +560,16 @@ const MemberRow = memo(function MemberRow({
     (s) => s.leftPx + s.widthPx > visibleLeftPx && s.leftPx < visibleRightPx
   );
 
+  const selectionBoxRanges = computeSelectionBoxRanges({
+    isMemberSelected,
+    isColumnSelection,
+    isThisMemberDragged,
+    selectedDays,
+    weekdayKeys,
+    visibleStart,
+    visibleEnd,
+  });
+
   return (
     // eslint-disable-next-line jsx-a11y/no-static-element-interactions
     <div
@@ -578,38 +647,41 @@ const MemberRow = memo(function MemberRow({
       })}
 
       {/* Span overlays — only visible spans rendered */}
-      {visibleSpans.map((span) => {
-        let isSpanInSelection = isMemberSelected;
-        if (!isSpanInSelection && selectedDays.size > 0 && (isColumnSelection || isThisMemberDragged)) {
-          for (let idx = span.startIndex; idx <= span.endIndex; idx++) {
-            if (selectedDays.has(weekdayKeys[idx])) {
-              isSpanInSelection = true;
-              break;
-            }
-          }
-        }
-        return (
-          <DraggableSpanBar
-            key={span.assignment.id}
-            span={span}
-            rowHeight={rowHeight}
-            memberId={memberId}
-            onClick={handleSpanClick}
-            onDoubleClick={handleSpanDoubleClick}
-            isSelected={selectedAssignmentId === span.assignment.id}
-            isHighlighted={highlightedAssignmentIds.has(span.assignment.id)}
-            isInSelection={isSpanInSelection}
-            onDragStart={onDragStart}
-            onDragEnd={onDragEnd}
-            isCut={clipboardMode === 'cut' && clipboardAssignmentId === span.assignment.id}
-            presenceUsers={assignmentPresenceMap.get(span.assignment.id)}
-            zoomLevel={zoomLevel}
-            colorMode={colorMode}
-            requestColorMap={requestColorMap}
-            clientColorMap={clientColorMap}
-          />
-        );
-      })}
+      {visibleSpans.map((span) => (
+        <DraggableSpanBar
+          key={span.assignment.id}
+          span={span}
+          rowHeight={rowHeight}
+          memberId={memberId}
+          onClick={handleSpanClick}
+          onDoubleClick={handleSpanDoubleClick}
+          isSelected={selectedAssignmentId === span.assignment.id}
+          isHighlighted={highlightedAssignmentIds.has(span.assignment.id)}
+          onDragStart={onDragStart}
+          onDragEnd={onDragEnd}
+          isCut={clipboardMode === 'cut' && clipboardAssignmentId === span.assignment.id}
+          presenceUsers={assignmentPresenceMap.get(span.assignment.id)}
+          zoomLevel={zoomLevel}
+          colorMode={colorMode}
+          requestColorMap={requestColorMap}
+          clientColorMap={clientColorMap}
+        />
+      ))}
+
+      {/* Row/column selection box rendered on top of spans */}
+      {selectionBoxRanges.map((range) => (
+        <div
+          key={`sel-box-${range.start}-${range.end}`}
+          className="absolute pointer-events-none border-2 border-primary/60 bg-primary/10 rounded-sm"
+          style={{
+            left: range.start * colWidth,
+            width: (range.end - range.start + 1) * colWidth,
+            top: 0,
+            height: rowHeight,
+            zIndex: 15,
+          }}
+        />
+      ))}
     </div>
   );
 }, (prev: Readonly<MemberRowProps>, next: Readonly<MemberRowProps>) => {
@@ -3200,7 +3272,7 @@ export function ScheduleView({ zoomLevel, onZoomIn, onZoomOut, onZoomReset }: Re
 
             {sortedMemberItems.length > 0 && (
               <div
-                className="sticky bottom-0 z-10 border-t bg-background"
+                className="sticky bottom-0 z-20 border-t bg-background"
                 style={{
                   gridRow: 4 + sortedMemberItems.length,
                   gridColumn: `1 / span ${weekdays.length}`,
