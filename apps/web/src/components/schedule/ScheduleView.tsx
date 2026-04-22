@@ -3112,14 +3112,14 @@ export function ScheduleView({ zoomLevel, onZoomIn, onZoomOut, onZoomReset }: Re
                       onMouseLeave={onHeaderMouseLeave}
                       className="absolute z-30 flex items-center justify-center rounded-full bg-primary text-primary-foreground shadow-md transition-colors hover:bg-primary/90"
                       style={{
-                        width: Math.round(24 * zoomLevel),
-                        height: Math.round(24 * zoomLevel),
+                        width: Math.max(22, Math.round(26 * zoomLevel)),
+                        height: Math.max(22, Math.round(26 * zoomLevel)),
                         right: Math.round(4 * zoomLevel),
                         top: Math.round(4 * zoomLevel),
                       }}
                       aria-label="Create assignment for selected dates"
                     >
-                      <Plus style={{ width: Math.round(16 * zoomLevel), height: Math.round(16 * zoomLevel) }} />
+                      <Plus style={{ width: Math.max(15, Math.round(17 * zoomLevel)), height: Math.max(15, Math.round(17 * zoomLevel)) }} />
                     </button>
                   )}
                 </div>
@@ -3216,12 +3216,12 @@ export function ScheduleView({ zoomLevel, onZoomIn, onZoomOut, onZoomReset }: Re
               style={{
                 left: selectionButtonPosition.left,
                 top: selectionButtonPosition.top,
-                width: Math.round(24 * zoomLevel),
-                height: Math.round(24 * zoomLevel),
+                width: Math.max(22, Math.round(26 * zoomLevel)),
+                height: Math.max(22, Math.round(26 * zoomLevel)),
               }}
               aria-label="Create assignment"
             >
-              <Plus style={{ width: Math.round(16 * zoomLevel), height: Math.round(16 * zoomLevel) }} />
+              <Plus style={{ width: Math.max(15, Math.round(17 * zoomLevel)), height: Math.max(15, Math.round(17 * zoomLevel)) }} />
             </button>
           )}
 
@@ -3242,13 +3242,13 @@ export function ScheduleView({ zoomLevel, onZoomIn, onZoomOut, onZoomReset }: Re
                     <button
                       className="flex items-center justify-center rounded-full border border-border bg-secondary text-secondary-foreground shadow-md transition-colors hover:bg-secondary/80"
                       style={{
-                        width: Math.round(24 * zoomLevel),
-                        height: Math.round(24 * zoomLevel),
+                        width: Math.max(22, Math.round(26 * zoomLevel)),
+                        height: Math.max(22, Math.round(26 * zoomLevel)),
                       }}
                       aria-label="Change status"
                       title="Change display status"
                     >
-                      <Clock4 style={{ width: Math.round(20 * zoomLevel), height: Math.round(20 * zoomLevel) }} />
+                      <Clock4 style={{ width: Math.max(18, Math.round(21 * zoomLevel)), height: Math.max(18, Math.round(21 * zoomLevel)) }} />
                     </button>
                   </PopoverTrigger>
                   <PopoverContent className="w-40 p-1" align="start">
@@ -3290,13 +3290,13 @@ export function ScheduleView({ zoomLevel, onZoomIn, onZoomOut, onZoomReset }: Re
                   onClick={() => setShowEditModal(true)}
                   className="flex items-center justify-center rounded-full border border-border bg-primary text-primary-foreground shadow-md transition-colors hover:bg-primary/90"
                   style={{
-                    width: Math.round(24 * zoomLevel),
-                    height: Math.round(24 * zoomLevel),
+                    width: Math.max(22, Math.round(26 * zoomLevel)),
+                    height: Math.max(22, Math.round(26 * zoomLevel)),
                   }}
                   aria-label="Edit assignment"
                   title="Edit assignment"
                 >
-                  <Pencil style={{ width: Math.round(15 * zoomLevel), height: Math.round(15 * zoomLevel) }} />
+                  <Pencil style={{ width: Math.max(14, Math.round(16 * zoomLevel)), height: Math.max(14, Math.round(16 * zoomLevel)) }} />
                 </button>
               )}
               {/* Delete Assignment Button */}
@@ -3308,13 +3308,13 @@ export function ScheduleView({ zoomLevel, onZoomIn, onZoomOut, onZoomReset }: Re
                   selectedAssignment && isLockedAssignment(selectedAssignment) && "opacity-40 cursor-not-allowed"
                 )}
                 style={{
-                  width: Math.round(24 * zoomLevel),
-                  height: Math.round(24 * zoomLevel),
+                  width: Math.max(22, Math.round(26 * zoomLevel)),
+                  height: Math.max(22, Math.round(26 * zoomLevel)),
                 }}
                 aria-label="Delete assignment"
                 title={selectedAssignment && isLockedAssignment(selectedAssignment) ? 'Assignment is locked' : 'Delete entire assignment'}
               >
-                <X style={{ width: Math.round(18 * zoomLevel), height: Math.round(18 * zoomLevel) }} />
+                <X style={{ width: Math.max(16, Math.round(19 * zoomLevel)), height: Math.max(16, Math.round(19 * zoomLevel)) }} />
               </button>
             </div>
           )}
