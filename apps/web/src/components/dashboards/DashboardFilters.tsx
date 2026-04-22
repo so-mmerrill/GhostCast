@@ -310,11 +310,11 @@ interface SkillsFilterBarProps {
 export function SkillsFilterBar({ members, skills, filters, onChange }: SkillsFilterBarProps) {
   const categories = [...new Set(skills.map(s => s.category || 'Uncategorized'))].sort((a, b) => a.localeCompare(b));
   const proficiencyOptions = [
-    { value: 1, label: 'No skill' },
-    { value: 2, label: 'Foundational' },
-    { value: 3, label: 'Working' },
-    { value: 4, label: 'Proficient' },
-    { value: 5, label: 'Mastery' },
+    { value: 1, label: '1 - No skill' },
+    { value: 2, label: '2 - Foundational' },
+    { value: 3, label: '3 - Working' },
+    { value: 4, label: '4 - Proficient' },
+    { value: 5, label: '5 - Mastery' },
   ];
 
   const hasFilters = filters.memberIds.length > 0 || filters.skillIds.length > 0 || filters.categories.length > 0 || filters.levels.length > 0;

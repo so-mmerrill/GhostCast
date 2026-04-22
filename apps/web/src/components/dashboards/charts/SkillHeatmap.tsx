@@ -46,7 +46,7 @@ export function SkillHeatmap({ members, skills, lookup }: SkillHeatmapProps) {
             {SKILL_LEVELS.map(sl => (
               <span key={sl.value} className="flex items-center gap-1">
                 <span className={`inline-block w-3 h-3 rounded-sm ${getLevelColor(sl.value)}`} />
-                {sl.label}
+                {sl.value} - {sl.label}
               </span>
             ))}
           </div>

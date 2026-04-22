@@ -578,26 +578,38 @@ const MemberRow = memo(function MemberRow({
       })}
 
       {/* Span overlays — only visible spans rendered */}
-      {visibleSpans.map((span) => (
-        <DraggableSpanBar
-          key={span.assignment.id}
-          span={span}
-          rowHeight={rowHeight}
-          memberId={memberId}
-          onClick={handleSpanClick}
-          onDoubleClick={handleSpanDoubleClick}
-          isSelected={selectedAssignmentId === span.assignment.id}
-          isHighlighted={highlightedAssignmentIds.has(span.assignment.id)}
-          onDragStart={onDragStart}
-          onDragEnd={onDragEnd}
-          isCut={clipboardMode === 'cut' && clipboardAssignmentId === span.assignment.id}
-          presenceUsers={assignmentPresenceMap.get(span.assignment.id)}
-          zoomLevel={zoomLevel}
-          colorMode={colorMode}
-          requestColorMap={requestColorMap}
-          clientColorMap={clientColorMap}
-        />
-      ))}
+      {visibleSpans.map((span) => {
+        let isSpanInSelection = isMemberSelected;
+        if (!isSpanInSelection && selectedDays.size > 0 && (isColumnSelection || isThisMemberDragged)) {
+          for (let idx = span.startIndex; idx <= span.endIndex; idx++) {
+            if (selectedDays.has(weekdayKeys[idx])) {
+              isSpanInSelection = true;
+              break;
+            }
+          }
+        }
+        return (
+          <DraggableSpanBar
+            key={span.assignment.id}
+            span={span}
+            rowHeight={rowHeight}
+            memberId={memberId}
+            onClick={handleSpanClick}
+            onDoubleClick={handleSpanDoubleClick}
+            isSelected={selectedAssignmentId === span.assignment.id}
+            isHighlighted={highlightedAssignmentIds.has(span.assignment.id)}
+            isInSelection={isSpanInSelection}
+            onDragStart={onDragStart}
+            onDragEnd={onDragEnd}
+            isCut={clipboardMode === 'cut' && clipboardAssignmentId === span.assignment.id}
+            presenceUsers={assignmentPresenceMap.get(span.assignment.id)}
+            zoomLevel={zoomLevel}
+            colorMode={colorMode}
+            requestColorMap={requestColorMap}
+            clientColorMap={clientColorMap}
+          />
+        );
+      })}
     </div>
   );
 }, (prev: Readonly<MemberRowProps>, next: Readonly<MemberRowProps>) => {

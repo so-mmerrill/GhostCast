@@ -111,7 +111,7 @@ export function SkillsDataTable({ data }: SkillsDataTableProps) {
                             className="inline-block w-1.5 h-1.5 rounded-full"
                             style={{ backgroundColor: levelInfo?.color }}
                           />
-                          {levelInfo?.label || 'Unknown'}
+                          {levelInfo ? `${levelInfo.value} - ${levelInfo.label}` : 'Unknown'}
                         </span>
                       </TableCell>
                     </TableRow>

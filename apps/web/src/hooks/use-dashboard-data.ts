@@ -151,7 +151,7 @@ export function computeProficiencyDistribution(
   }
   return SKILL_LEVELS.map(sl => ({
     level: sl.value,
-    label: sl.label,
+    label: `${sl.value} - ${sl.label}`,
     count: counts[sl.value] || 0,
     color: sl.color,
   }));

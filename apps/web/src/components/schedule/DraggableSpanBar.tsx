@@ -258,6 +258,8 @@ interface DraggableSpanBarProps {
   onDoubleClick?: (assignment: Assignment) => void;
   isSelected: boolean;
   isHighlighted?: boolean;
+  /** True when this bar falls within the current row/column selection */
+  isInSelection?: boolean;
   onDragStart: (data: DragData) => void;
   onDragEnd: () => void;
   isCut?: boolean;
@@ -281,6 +283,7 @@ function DraggableSpanBarInner({
   onDoubleClick,
   isSelected,
   isHighlighted = false,
+  isInSelection = false,
   onDragStart,
   onDragEnd,
   isCut = false,
@@ -385,6 +388,9 @@ function DraggableSpanBarInner({
         }}
         title={computeTooltipTitle(isHoliday, assignment, displayTitle)}
       >
+        {isInSelection && (
+          <div className="absolute inset-0 pointer-events-none bg-primary/20" />
+        )}
         {isLocked && !isHoliday && (
           <Lock className="shrink-0 h-3 w-3 ml-1 opacity-60" />
         )}
@@ -415,26 +421,39 @@ function DraggableSpanBarInner({
   );
 }
 
+const SPAN_COMPARE_KEYS: (keyof AssignmentSpan)[] = [
+  'assignment',
+  'leftPx',
+  'widthPx',
+  'lane',
+  'totalLanes',
+];
+
+const PROP_COMPARE_KEYS: (keyof DraggableSpanBarProps)[] = [
+  'rowHeight',
+  'memberId',
+  'isSelected',
+  'isHighlighted',
+  'isInSelection',
+  'isCut',
+  'zoomLevel',
+  'onClick',
+  'onDoubleClick',
+  'onDragStart',
+  'onDragEnd',
+  'presenceUsers',
+  'colorMode',
+  'requestColorMap',
+  'clientColorMap',
+];
+
 // Custom comparator: span object is recreated each render, so compare key fields
 export const DraggableSpanBar = memo(DraggableSpanBarInner, (prev, next) => {
-  if (prev.span.assignment !== next.span.assignment) return false;
-  if (prev.span.leftPx !== next.span.leftPx) return false;
-  if (prev.span.widthPx !== next.span.widthPx) return false;
-  if (prev.span.lane !== next.span.lane) return false;
-  if (prev.span.totalLanes !== next.span.totalLanes) return false;
-  if (prev.rowHeight !== next.rowHeight) return false;
-  if (prev.memberId !== next.memberId) return false;
-  if (prev.isSelected !== next.isSelected) return false;
-  if (prev.isHighlighted !== next.isHighlighted) return false;
-  if (prev.isCut !== next.isCut) return false;
-  if (prev.zoomLevel !== next.zoomLevel) return false;
-  if (prev.onClick !== next.onClick) return false;
-  if (prev.onDoubleClick !== next.onDoubleClick) return false;
-  if (prev.onDragStart !== next.onDragStart) return false;
-  if (prev.onDragEnd !== next.onDragEnd) return false;
-  if (prev.presenceUsers !== next.presenceUsers) return false;
-  if (prev.colorMode !== next.colorMode) return false;
-  if (prev.requestColorMap !== next.requestColorMap) return false;
-  if (prev.clientColorMap !== next.clientColorMap) return false;
+  for (const key of SPAN_COMPARE_KEYS) {
+    if (prev.span[key] !== next.span[key]) return false;
+  }
+  for (const key of PROP_COMPARE_KEYS) {
+    if (prev[key] !== next[key]) return false;
+  }
   return true;
 });

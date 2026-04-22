@@ -236,7 +236,7 @@ export function MemberSkillsTab({ memberId, skills, onUpdate, readOnly }: Member
                   <TableCell>
                     {readOnly ? (
                       <span className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-sm ${levelInfo?.color || ''}`}>
-                        {levelInfo?.label || 'Unknown'}
+                        {levelInfo ? `${levelInfo.value} - ${levelInfo.label}` : 'Unknown'}
                       </span>
                     ) : (
                       <Select
