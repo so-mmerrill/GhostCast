@@ -43,14 +43,8 @@ import {
   CommandList,
 } from '@/components/ui/command';
 import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from '@/components/ui/collapsible';
-import {
   Loader2,
   Check,
-  ChevronDown,
   X,
   ChevronsUpDown,
   Plane,
@@ -117,7 +111,6 @@ interface RequestData {
   travelLocation: string | null;
   timezone: string | null;
   urlLink: string | null;
-  notes: string | null;
   studentCount: number;
   format: string | null;
   location: string | null;
@@ -429,9 +422,7 @@ export function EditRequestModal({
   const [format, setFormat] = useState('');
   const [location, setLocation] = useState('');
 
-  // Additional details (collapsible)
   const [description, setDescription] = useState('');
-  const [notes, setNotes] = useState('');
   const [travelRequired, setTravelRequired] = useState(false);
   const [travelLocation, setTravelLocation] = useState('');
   const [selectedMemberIds, setSelectedMemberIds] = useState<string[]>([]);
@@ -445,7 +436,6 @@ export function EditRequestModal({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
-  const [additionalDetailsOpen, setAdditionalDetailsOpen] = useState(false);
   const [projectTypeOpen, setProjectTypeOpen] = useState(false);
   const [timezoneOpen, setTimezoneOpen] = useState(false);
   const [skillsOpen, setSkillsOpen] = useState(false);
@@ -540,7 +530,6 @@ export function EditRequestModal({
       setTravelLocation(requestData.travelLocation || '');
       setTimezone(requestData.timezone || '');
       setUrlLink(requestData.urlLink || '');
-      setNotes(requestData.notes || '');
       setStudentCount(String(requestData.studentCount || 0));
       setFormat(requestData.format || '');
       setLocation(requestData.location || '');
@@ -649,7 +638,6 @@ export function EditRequestModal({
     setFormat('');
     setLocation('');
     setDescription('');
-    setNotes('');
     setTravelRequired(false);
     setTravelLocation('');
     setSelectedMemberIds([]);
@@ -658,7 +646,6 @@ export function EditRequestModal({
     setSelectedProjectTypeObj(null);
     setRequiredMemberCount('0');
     setMemberSelectionMode('count');
-    setAdditionalDetailsOpen(false);
   };
 
   // Helper: Import text fields from Quip
@@ -712,10 +699,8 @@ export function EditRequestModal({
     importQuipTextFields(fields);
     importQuipNumericFields(fields);
 
-    // Handle description with additional details panel
     if (fields.description) {
       setDescription(fields.description);
-      setAdditionalDetailsOpen(true);
     }
 
     // Handle travel fields
@@ -842,7 +827,6 @@ export function EditRequestModal({
         travelLocation: travelRequired && travelLocation.trim() ? travelLocation.trim() : null,
         timezone: timezone.trim() || null,
         urlLink: urlLink.trim() || null,
-        notes: notes.trim() || null,
         studentCount: Number.parseInt(studentCount, 10) || 0,
         format: format || null,
         location: location.trim() || null,
@@ -1355,43 +1339,18 @@ export function EditRequestModal({
                 </div>
               )}
 
-              {/* Collapsible Additional Details */}
-              {isFieldVisible('description') && (
-                <Collapsible open={additionalDetailsOpen} onOpenChange={setAdditionalDetailsOpen}>
-                  <CollapsibleTrigger asChild>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      className="w-full justify-between px-0 hover:bg-transparent"
-                    >
-                      <span className="text-sm font-medium">
-                        Additional Details {isFieldRequired('description') && <span className="text-destructive">*</span>}
-                      </span>
-                      <ChevronDown
-                        className={`h-4 w-4 transition-transform ${
-                          additionalDetailsOpen ? 'rotate-180' : ''
-                        }`}
-                      />
-                    </Button>
-                  </CollapsibleTrigger>
-                  <CollapsibleContent className="space-y-4 pt-2">
-                    <div className="space-y-2">
-                      <Label htmlFor="description">
-                        Description & Notes {isFieldRequired('description') && <span className="text-destructive">*</span>}
-                      </Label>
-                      <Textarea
-                        id="description"
-                        value={description}
-                        onChange={(e) => setDescription(sanitizeInput(e.target.value, VALIDATION.DESCRIPTION_MAX_LENGTH))}
-                        placeholder="Project description and any additional notes..."
-                        rows={4}
-                        className="resize-none"
-                        maxLength={VALIDATION.DESCRIPTION_MAX_LENGTH}
-                      />
-                    </div>
-                  </CollapsibleContent>
-                </Collapsible>
-              )}
+              <div className="space-y-2">
+                <Label htmlFor="description">Description/Notes</Label>
+                <Textarea
+                  id="description"
+                  value={description}
+                  onChange={(e) => setDescription(sanitizeInput(e.target.value, VALIDATION.DESCRIPTION_MAX_LENGTH))}
+                  placeholder="Project description and any additional notes..."
+                  rows={4}
+                  className="resize-none"
+                  maxLength={VALIDATION.DESCRIPTION_MAX_LENGTH}
+                />
+              </div>
             </div>
 
             <DialogFooter className="px-6 py-4 border-t bg-muted/30">

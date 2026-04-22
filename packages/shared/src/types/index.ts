@@ -554,7 +554,6 @@ export interface Request extends BaseEntity {
   studentCount: number;
   format?: string | null;
   location?: string | null;
-  notes?: string | null;
 
   // Relations
   requiredMembers?: RequestMember[];
@@ -584,7 +583,6 @@ export interface RequestCreateInput {
   studentCount?: number;
   format?: string;
   location?: string;
-  notes?: string;
 }
 
 export interface RequestUpdateInput {
@@ -610,7 +608,6 @@ export interface RequestUpdateInput {
   studentCount?: number;
   format?: string | null;
   location?: string | null;
-  notes?: string | null;
 }
 
 // ===========================================

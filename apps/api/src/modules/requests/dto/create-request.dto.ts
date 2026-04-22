@@ -129,8 +129,4 @@ export class CreateRequestDto {
   @IsOptional()
   @MaxLength(200)
   location?: string;
-
-  @IsString()
-  @IsOptional()
-  notes?: string;
 }

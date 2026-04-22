@@ -126,6 +126,8 @@ interface EditAssignmentModalProps {
   onSuccess?: () => void;
 }
 
+const wheelAttached = new WeakSet<HTMLElement>();
+
 export function EditAssignmentModal({
   open,
   onOpenChange,
@@ -151,6 +153,23 @@ export function EditAssignmentModal({
 
   // Title/request dropdown state
   const [titleOpen, setTitleOpen] = useState(false);
+
+  // react-remove-scroll (used by Radix Dialog) preventDefaults wheel events
+  // outside its subtree, which kills scrolling on portaled Popover content.
+  // Bypass it with a native non-passive listener that scrolls the list manually.
+  const attachPopoverListWheel = (el: HTMLDivElement | null) => {
+    if (!el || wheelAttached.has(el)) return;
+    wheelAttached.add(el);
+    el.addEventListener(
+      'wheel',
+      (e) => {
+        el.scrollTop += e.deltaY;
+        if (e.cancelable) e.preventDefault();
+        e.stopPropagation();
+      },
+      { passive: false },
+    );
+  };
 
   // Searchable multi-select state
   const [membersOpen, setMembersOpen] = useState(false);
@@ -578,7 +597,7 @@ export function EditAssignmentModal({
                       }
                     }}
                   />
-                  <CommandList className="px-1 max-h-60 overflow-y-auto">
+                  <CommandList className="px-1 max-h-60 overflow-y-auto scrollbar-on-hover" ref={attachPopoverListWheel}>
                     {title && (
                       <CommandGroup heading="Custom">
                         <CommandItem
@@ -703,7 +722,7 @@ export function EditAssignmentModal({
                     value={projectTypesSearch}
                     onValueChange={setProjectTypesSearch}
                   />
-                  <CommandList className="px-1 max-h-60 overflow-y-auto">
+                  <CommandList className="px-1 max-h-60 overflow-y-auto scrollbar-on-hover" ref={attachPopoverListWheel}>
                     <CommandEmpty>No project types found.</CommandEmpty>
                     <CommandGroup>
                       {projectTypes
@@ -971,7 +990,7 @@ export function EditAssignmentModal({
                       value={projectRolesSearch}
                       onValueChange={setProjectRolesSearch}
                     />
-                    <CommandList className="max-h-60 overflow-y-auto">
+                    <CommandList className="max-h-60 overflow-y-auto scrollbar-on-hover" ref={attachPopoverListWheel}>
                       <CommandEmpty>No roles found.</CommandEmpty>
                       <CommandGroup>
                         {projectRoles
@@ -1067,7 +1086,7 @@ export function EditAssignmentModal({
                       value={formattersSearch}
                       onValueChange={setFormattersSearch}
                     />
-                    <CommandList className="max-h-60 overflow-y-auto">
+                    <CommandList className="max-h-60 overflow-y-auto scrollbar-on-hover" ref={attachPopoverListWheel}>
                       <CommandEmpty>No formatters found.</CommandEmpty>
                       <CommandGroup>
                         {formatters
@@ -1108,7 +1127,7 @@ export function EditAssignmentModal({
 
           {/* Description Field - moved to bottom */}
           <div className="space-y-2">
-            <Label htmlFor="edit-description">Notes</Label>
+            <Label htmlFor="edit-description">Description/Notes</Label>
             <Input
               id="edit-description"
               value={description}

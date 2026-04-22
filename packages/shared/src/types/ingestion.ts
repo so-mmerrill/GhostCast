@@ -161,7 +161,6 @@ export interface IngestionRequest {
   travelRequired?: boolean;
   timezone?: string;
   urlLink?: string;
-  notes?: string;
 }
 
 // ===========================================

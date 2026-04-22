@@ -92,7 +92,6 @@ export class RequestProcessor extends BaseProcessor<IngestionRequest> {
         travelRequired: item.travelRequired ?? false,
         timezone: item.timezone,
         urlLink: item.urlLink,
-        notes: item.notes,
         requiredMembers:
           memberIds.length > 0
             ? {
@@ -200,7 +199,6 @@ export class RequestProcessor extends BaseProcessor<IngestionRequest> {
         travelRequired: item.travelRequired,
         timezone: item.timezone,
         urlLink: item.urlLink,
-        notes: item.notes,
       },
     });
 

@@ -639,8 +639,6 @@ export class LlmChatService {
     this.addRequestSkillsAndMatches(request, allMembers, parts);
     this.addRequiredMembers(request, parts);
 
-    if (request.notes) parts.push(`Notes: ${request.notes}`);
-
     return parts.join('\n');
   }
 

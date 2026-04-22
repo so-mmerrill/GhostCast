@@ -98,6 +98,8 @@ interface CreateAssignmentModalProps {
   availableMembers?: AvailableMember[];
 }
 
+const wheelAttached = new WeakSet<HTMLElement>();
+
 export function CreateAssignmentModal({
   open,
   onOpenChange,
@@ -128,6 +130,23 @@ export function CreateAssignmentModal({
   const [selectedMemberIds, setSelectedMemberIds] = useState<string[]>([]);
   const [membersOpen, setMembersOpen] = useState(false);
   const [membersSearch, setMembersSearch] = useState('');
+
+  // react-remove-scroll (used by Radix Dialog) preventDefaults wheel events
+  // outside its subtree, which kills scrolling on portaled Popover content.
+  // Bypass it with a native non-passive listener that scrolls the list manually.
+  const attachPopoverListWheel = (el: HTMLDivElement | null) => {
+    if (!el || wheelAttached.has(el)) return;
+    wheelAttached.add(el);
+    el.addEventListener(
+      'wheel',
+      (e) => {
+        el.scrollTop += e.deltaY;
+        if (e.cancelable) e.preventDefault();
+        e.stopPropagation();
+      },
+      { passive: false },
+    );
+  };
 
   // Derive departments from available members for department-based selection
   const departments = useMemo(() => {
@@ -659,7 +678,7 @@ export function CreateAssignmentModal({
                       }
                     }}
                   />
-                  <CommandList className="px-1 max-h-60 overflow-y-auto">
+                  <CommandList className="px-1 max-h-60 overflow-y-auto scrollbar-on-hover" ref={attachPopoverListWheel}>
                     {title && (
                       <CommandGroup heading="Custom">
                         <CommandItem
@@ -783,7 +802,7 @@ export function CreateAssignmentModal({
                     value={projectTypesSearch}
                     onValueChange={setProjectTypesSearch}
                   />
-                  <CommandList className="px-1 max-h-60 overflow-y-auto">
+                  <CommandList className="px-1 max-h-60 overflow-y-auto scrollbar-on-hover" ref={attachPopoverListWheel}>
                     <CommandEmpty>No project types found.</CommandEmpty>
                     <CommandGroup>
                       {projectTypes
@@ -879,7 +898,7 @@ export function CreateAssignmentModal({
                       value={projectRolesSearch}
                       onValueChange={setProjectRolesSearch}
                     />
-                    <CommandList className="px-1 max-h-60 overflow-y-auto">
+                    <CommandList className="px-1 max-h-60 overflow-y-auto scrollbar-on-hover" ref={attachPopoverListWheel}>
                       <CommandEmpty>No roles found.</CommandEmpty>
                       <CommandGroup>
                         {projectRoles
@@ -972,7 +991,7 @@ export function CreateAssignmentModal({
                       value={formattersSearch}
                       onValueChange={setFormattersSearch}
                     />
-                    <CommandList className="px-1 max-h-60 overflow-y-auto">
+                    <CommandList className="px-1 max-h-60 overflow-y-auto scrollbar-on-hover" ref={attachPopoverListWheel}>
                       <CommandEmpty>No formatters found.</CommandEmpty>
                       <CommandGroup>
                         {formatters
@@ -1013,7 +1032,7 @@ export function CreateAssignmentModal({
 
           {/* Description Field - moved to bottom */}
           <div className="space-y-2">
-            <Label htmlFor="description">Notes</Label>
+            <Label htmlFor="description">Description/Notes</Label>
             <Input
               id="description"
               value={description}

@@ -130,8 +130,4 @@ export class UpdateRequestDto {
   @IsOptional()
   @MaxLength(200)
   location?: string | null;
-
-  @IsString()
-  @IsOptional()
-  notes?: string | null;
 }

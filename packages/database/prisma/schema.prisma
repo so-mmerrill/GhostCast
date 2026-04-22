@@ -410,7 +410,6 @@ model Request {
   studentCount   Int     @default(0)
   format         String? @db.VarChar(100)
   location       String? @db.VarChar(200)
-  notes          String? @db.Text
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

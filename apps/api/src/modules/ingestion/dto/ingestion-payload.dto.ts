@@ -274,10 +274,6 @@ export class IngestionRequestDto {
   @IsString()
   @MaxLength(500)
   urlLink?: string;
-
-  @IsOptional()
-  @IsString()
-  notes?: string;
 }
 
 // ===================================
