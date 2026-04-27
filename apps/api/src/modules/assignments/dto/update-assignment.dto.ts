@@ -9,7 +9,7 @@ import {
   MaxLength,
 } from 'class-validator';
 import { Type } from 'class-transformer';
-import { AssignmentStatus } from '@ghostcast/shared';
+import { DisplayStatus } from '@ghostcast/shared';
 
 export class UpdateAssignmentDto {
   @IsString()
@@ -37,9 +37,9 @@ export class UpdateAssignmentDto {
   @IsOptional()
   projectTypeId?: string;
 
-  @IsEnum(AssignmentStatus)
+  @IsEnum(DisplayStatus)
   @IsOptional()
-  status?: AssignmentStatus;
+  displayStatus?: DisplayStatus;
 
   @IsArray()
   @IsString({ each: true })

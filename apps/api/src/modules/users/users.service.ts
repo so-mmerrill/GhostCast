@@ -48,6 +48,7 @@ export class UsersService {
           isActive: true,
           mustResetPassword: true,
           ssoProvider: true,
+          preferences: true,
           lastLogin: true,
           lastPasswordChange: true,
           createdAt: true,
@@ -93,7 +94,39 @@ export class UsersService {
       throw new NotFoundException('User not found');
     }
 
+    user.preferences = (await this.ensureLinkedMember(user)) as typeof user.preferences;
+
     return user;
+  }
+
+  /**
+   * Auto-populate `preferences.scheduleFilter.linkedMemberId` by matching
+   * User.email against an active Member.email when not yet set. Idempotent.
+   */
+  private async ensureLinkedMember(user: {
+    id: string;
+    email: string;
+    preferences: unknown;
+  }): Promise<Record<string, unknown>> {
+    const prefs = (user.preferences as Record<string, unknown> | null) ?? {};
+    const filter = (prefs.scheduleFilter as Record<string, unknown> | undefined) ?? {};
+    if (filter.linkedMemberId) return prefs;
+
+    const member = await this.prisma.member.findFirst({
+      where: { email: user.email, isActive: true },
+      select: { id: true },
+    });
+    if (!member) return prefs;
+
+    const updated = {
+      ...prefs,
+      scheduleFilter: { ...filter, linkedMemberId: member.id },
+    };
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: { preferences: updated },
+    });
+    return updated;
   }
 
   async findByEmail(email: string) {
@@ -169,6 +202,7 @@ export class UsersService {
         role: true,
         isActive: true,
         mustResetPassword: true,
+        preferences: true,
         updatedAt: true,
       },
     });

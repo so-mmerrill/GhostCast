@@ -17,7 +17,6 @@ import {
 import {
   ConflictStrategy,
   ProcessingMode,
-  AssignmentStatus,
   RequestStatus,
 } from '@ghostcast/shared';
 
@@ -166,10 +165,6 @@ export class IngestionAssignmentDto {
 
   @IsString()
   endDate!: string;
-
-  @IsOptional()
-  @IsEnum(AssignmentStatus)
-  status?: AssignmentStatus;
 
   @IsString()
   @MinLength(1)

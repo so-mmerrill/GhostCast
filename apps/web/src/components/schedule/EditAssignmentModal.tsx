@@ -107,6 +107,7 @@ interface Assignment {
   description?: string | null;
   startDate: string;
   endDate: string;
+  displayStatus?: string;
   requestId?: string | null;
   projectType: {
     id: string;
@@ -400,8 +401,8 @@ export function EditAssignmentModal({
       // Set request link
       setSelectedRequestId(assignment.requestId || 'manual');
 
-      // Set display status from metadata
-      setDisplayStatus((assignment.metadata?.displayStatus as string) || 'SCHEDULED');
+      // Set display status from the assignment column (metadata fallback for any pre-migration cache)
+      setDisplayStatus(assignment.displayStatus || (assignment.metadata?.displayStatus as string) || 'SCHEDULED');
 
       // Set lock state
       setIsLocked(assignment.metadata?.isLocked === true);
@@ -453,8 +454,8 @@ export function EditAssignmentModal({
         formatterIds: selectedFormatterIds,
         projectRoleIds: selectedProjectRoleIds,
         requestId: selectedRequestId === 'manual' ? null : selectedRequestId,
+        ...(selectedRequestId === 'manual' ? { displayStatus } : {}),
         metadata: {
-          ...(selectedRequestId === 'manual' ? { displayStatus } : {}),
           isLocked,
         },
       };

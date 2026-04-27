@@ -231,6 +231,38 @@ export function removeAssignmentFromCache(
 }
 
 /**
+ * Removes every assignment whose parent request matches the given id from all
+ * active schedule caches. Used when a MEMBER user must immediately stop seeing
+ * assignments after the parent request leaves SCHEDULED.
+ */
+export function removeAssignmentsByRequestIdFromCache(
+  queryClient: QueryClient,
+  requestId: string
+): void {
+  const scheduleEntries = queryClient.getQueriesData<ScheduleData>({
+    queryKey: ['schedule'],
+  });
+
+  for (const [queryKey, cachedData] of scheduleEntries) {
+    if (!cachedData) continue;
+    const reqId = (a: Assignment) =>
+      (a.request as { id?: string } | undefined)?.id
+      ?? (a as { requestId?: string }).requestId;
+
+    const hasMatch = cachedData.data.assignments.some((a) => reqId(a) === requestId);
+    if (!hasMatch) continue;
+
+    queryClient.setQueryData(queryKey, {
+      ...cachedData,
+      data: {
+        ...cachedData.data,
+        assignments: cachedData.data.assignments.filter((a) => reqId(a) !== requestId),
+      },
+    });
+  }
+}
+
+/**
  * Updates request.status on all assignments linked to a given request
  * in all active schedule caches. This ensures assignment bars immediately
  * reflect the new status (color/styling) without waiting for a refetch.

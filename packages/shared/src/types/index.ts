@@ -11,11 +11,27 @@ export enum Role {
   UNASSIGNED = 'UNASSIGNED',
 }
 
-export enum AssignmentStatus {
+export enum DisplayStatus {
   SCHEDULED = 'SCHEDULED',
-  IN_PROGRESS = 'IN_PROGRESS',
-  COMPLETED = 'COMPLETED',
-  CANCELLED = 'CANCELLED',
+  UNSCHEDULED = 'UNSCHEDULED',
+  FORECAST = 'FORECAST',
+}
+
+export enum ScheduleFilterMode {
+  /** No restriction — every member's assignments are visible. */
+  ALL = 'ALL',
+  /** Visibility = linked member ∪ selected departments' members ∪ explicitly selected members. */
+  CUSTOM = 'CUSTOM',
+}
+
+export interface ScheduleFilterPreference {
+  mode: ScheduleFilterMode;
+  /** Resolved Member.id for the user — auto-filled by email match, admin-overridable. Always included in CUSTOM mode. */
+  linkedMemberId?: string;
+  /** Free-text department names whose members should be visible in CUSTOM mode. */
+  departments?: string[];
+  /** Explicit member ids to make visible in CUSTOM mode. */
+  memberIds?: string[];
 }
 
 // ===========================================
@@ -169,7 +185,7 @@ export interface Assignment extends BaseEntity {
   startDate: Date;
   endDate: Date;
   projectTypeId: string;
-  status: AssignmentStatus;
+  displayStatus: DisplayStatus;
   metadata: Record<string, unknown>;
   createdById: string;
 }
@@ -216,7 +232,7 @@ export interface AssignmentUpdateInput {
   startDate?: Date;
   endDate?: Date;
   projectTypeId?: string;
-  status?: AssignmentStatus;
+  displayStatus?: DisplayStatus;
   memberIds?: string[];
   skillIds?: string[];
   formatterIds?: string[];
@@ -705,7 +721,7 @@ export interface CalendarQuery {
   endDate: Date;
   memberIds?: string[];
   projectTypeIds?: string[];
-  statuses?: AssignmentStatus[];
+  displayStatuses?: DisplayStatus[];
 }
 
 export interface CalendarDay {

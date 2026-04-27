@@ -4,7 +4,6 @@ import {
   IngestionRecordStatus,
   IngestionAssignment,
   ProcessingContext,
-  AssignmentStatus,
 } from '@ghostcast/shared';
 import { BaseProcessor } from './base.processor';
 import { PrismaTransaction } from './processor.interface';
@@ -101,7 +100,6 @@ export class AssignmentProcessor extends BaseProcessor<IngestionAssignment> {
         description: item.description,
         startDate: new Date(item.startDate),
         endDate: new Date(item.endDate),
-        status: item.status ?? AssignmentStatus.SCHEDULED,
         projectTypeId,
         createdById,
         requestId,
@@ -230,7 +228,6 @@ export class AssignmentProcessor extends BaseProcessor<IngestionAssignment> {
         description: item.description,
         startDate: new Date(item.startDate),
         endDate: new Date(item.endDate),
-        status: item.status,
         projectTypeId,
         requestId,
         metadata: {

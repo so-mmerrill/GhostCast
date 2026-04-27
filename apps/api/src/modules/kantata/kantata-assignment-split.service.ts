@@ -133,7 +133,7 @@ export class KantataAssignmentSplitService {
             startDate: true,
             endDate: true,
             projectTypeId: true,
-            status: true,
+            displayStatus: true,
             requestId: true,
             createdById: true,
             metadata: true,
@@ -181,7 +181,7 @@ export class KantataAssignmentSplitService {
             startDate: new Date(segment.start + 'T00:00:00Z'),
             endDate: new Date(segment.end + 'T00:00:00Z'),
             projectTypeId: assignment.projectTypeId,
-            status: assignment.status,
+            displayStatus: assignment.displayStatus,
             requestId: assignment.requestId,
             createdById: assignment.createdById,
             metadata: {

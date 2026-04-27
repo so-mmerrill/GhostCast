@@ -2,7 +2,7 @@
 // Data Ingestion Types
 // ===========================================
 
-import { AssignmentStatus, MemberWorkingHours, RequestStatus } from './index';
+import { MemberWorkingHours, RequestStatus } from './index';
 
 // ===========================================
 // Enums
@@ -121,7 +121,6 @@ export interface IngestionAssignment {
   startDate: string;
   /** ISO date string */
   endDate: string;
-  status?: AssignmentStatus;
   /** External project type ID (will be resolved to internal ID) */
   projectTypeExternalId: string;
   /** External member IDs (will be resolved to internal IDs) */

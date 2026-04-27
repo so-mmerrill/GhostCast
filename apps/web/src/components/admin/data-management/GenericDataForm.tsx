@@ -317,6 +317,8 @@ export function GenericDataForm({
         initial[field.name] = true;
       } else if (field.type === 'color') {
         initial[field.name] = '#3B82F6';
+      } else if (field.type === 'custom') {
+        initial[field.name] = initialData?.[field.name] ?? null;
       } else {
         initial[field.name] = '';
       }
@@ -465,6 +467,11 @@ export function GenericDataForm({
           </div>
         );
 
+      case 'custom':
+        return field.render
+          ? field.render({ values: formData, setValue: handleChange, isEditMode: isEditing })
+          : null;
+
       default:
         return null;
     }
@@ -476,7 +483,7 @@ export function GenericDataForm({
         .filter((field) => !(isEditing && field.name === 'mustResetPassword'))
         .map((field) => (
         <div key={field.name} className="space-y-2">
-          {field.type !== 'boolean' && (
+          {field.type !== 'boolean' && field.type !== 'custom' && (
             <Label htmlFor={field.name}>
               {field.label}
               {field.required && <span className="text-destructive ml-1">*</span>}

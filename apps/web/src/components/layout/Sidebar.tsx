@@ -28,9 +28,9 @@ type MenuItem = {
 const menuItems: MenuItem[] = [
   { to: '/', icon: CalendarDays, label: 'Schedule' },
   { to: '/requests', icon: ClipboardList, label: 'Requests', minRole: Role.REQUESTER },
-  { to: '/members', icon: Users, label: 'Members' },
+  { to: '/members', icon: Users, label: 'Members', minRole: Role.REQUESTER },
   // { to: '/dashboards', icon: BarChart3, label: 'Dashboards', minRole: Role.MANAGER },
-  { to: '/integrations', icon: Puzzle, label: 'Plugins' },
+  { to: '/integrations', icon: Puzzle, label: 'Plugins', minRole: Role.REQUESTER },
   { to: '/admin', icon: Shield, label: 'Administration', minRole: Role.ADMIN },
 ];
 

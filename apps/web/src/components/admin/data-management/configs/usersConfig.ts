@@ -1,5 +1,6 @@
 import { User } from '@ghostcast/shared';
 import { DataEntityConfig } from './types';
+import { ScheduleFilterField } from '../ScheduleFilterField';
 
 export const usersConfig: DataEntityConfig<User> = {
   entityType: 'user',
@@ -106,6 +107,12 @@ export const usersConfig: DataEntityConfig<User> = {
       label: 'Force Password Reset',
       type: 'boolean',
       required: false,
+    },
+    {
+      name: 'preferences',
+      label: 'Schedule Visibility',
+      type: 'custom',
+      render: ScheduleFilterField,
     },
   ],
 };

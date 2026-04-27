@@ -3,12 +3,14 @@ import {
   IsOptional,
   IsDate,
   IsArray,
+  IsEnum,
   IsObject,
   MinLength,
   MaxLength,
   IsNotEmpty,
 } from 'class-validator';
 import { Type } from 'class-transformer';
+import { DisplayStatus } from '@ghostcast/shared';
 
 export class CreateAssignmentDto {
   @IsString()
@@ -52,6 +54,10 @@ export class CreateAssignmentDto {
   @IsString({ each: true })
   @IsOptional()
   projectRoleIds?: string[];
+
+  @IsEnum(DisplayStatus)
+  @IsOptional()
+  displayStatus?: DisplayStatus;
 
   @IsString()
   @IsOptional()

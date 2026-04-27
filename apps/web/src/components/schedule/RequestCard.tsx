@@ -11,10 +11,12 @@ import {
   DropdownMenuLabel,
 } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
-import { RequestStatus } from '@ghostcast/shared';
+import { RequestStatus, Role } from '@ghostcast/shared';
 import { api } from '@/lib/api';
 import { updateRequestStatusInCache, updateRequestStatusInPaginatedCache } from '@/lib/schedule-cache';
 import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/features/auth/AuthProvider';
+import { hasMinimumRole } from '@/lib/route-permissions';
 
 // Parse date string as local date to avoid timezone offset issues
 const parseLocalDate = (dateStr: string): Date => {
@@ -72,6 +74,8 @@ const STATUS_OPTIONS = [
 export function RequestCard({ request, onClick, isSelected, actions, onHighlight, isHighlighted }: Readonly<RequestCardProps>) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const { user } = useAuth();
+  const canChangeStatus = !!user && hasMinimumRole(user.role, Role.REQUESTER);
 
   const updateStatusMutation = useMutation({
     mutationFn: async (newStatus: RequestStatus) => {
@@ -179,7 +183,7 @@ export function RequestCard({ request, onClick, isSelected, actions, onHighlight
             <Highlighter className="h-4 w-4" />
           </Button>
         )}
-        {currentStatus && (
+        {currentStatus && canChangeStatus && (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button

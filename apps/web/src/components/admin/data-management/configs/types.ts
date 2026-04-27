@@ -8,10 +8,16 @@ export interface DataColumnConfig<T> {
   width?: string;
 }
 
+export interface CustomFieldRenderArgs {
+  values: Record<string, unknown>;
+  setValue: (name: string, value: unknown) => void;
+  isEditMode: boolean;
+}
+
 export interface DataFieldConfig {
   name: string;
   label: string;
-  type: 'text' | 'textarea' | 'color' | 'select' | 'boolean' | 'multiselect' | 'fieldConfig' | 'password';
+  type: 'text' | 'textarea' | 'color' | 'select' | 'boolean' | 'multiselect' | 'fieldConfig' | 'password' | 'custom';
   required?: boolean;
   placeholder?: string;
   options?: { value: string; label: string }[];
@@ -27,6 +33,8 @@ export interface DataFieldConfig {
   optionValueKey?: string;
   // For fieldConfig - list of configurable fields
   configurableFields?: { key: string; label: string }[];
+  // For 'custom' type — caller renders the input
+  render?: (args: CustomFieldRenderArgs) => ReactNode;
   // Conditional display based on create/edit mode
   showOnlyForCreate?: boolean;
   showOnlyForEdit?: boolean;

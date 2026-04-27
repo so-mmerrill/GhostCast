@@ -35,10 +35,11 @@ import { useCellPresence } from '@/hooks/use-cell-presence';
 import { useScheduleUndoRedo } from '@/hooks/use-schedule-undo-redo';
 import { useUndoRedoStore } from '@/stores/undo-redo-store';
 import { useScheduleViewStore } from '@/stores/schedule-view-store';
-import { CellSelection, AssignmentSelection, AssignmentStatus, RequestStatus, Role, generateRequestColors, generateClientColors } from '@ghostcast/shared';
+import { CellSelection, AssignmentSelection, DisplayStatus, RequestStatus, Role, generateRequestColors, generateClientColors } from '@ghostcast/shared';
 import type { ColorMode, MemberSortBy, DepartmentSortBy } from '@/stores/schedule-view-store';
 import { useAuth } from '@/features/auth/AuthProvider';
 import { refreshScheduleCache, findAssignmentDatesInCache, findAssignmentMemberIdsInCache, removeAssignmentFromCache, updateRequestStatusInCache, updateRequestStatusInPaginatedCache } from '@/lib/schedule-cache';
+import { useResolvedScheduleFilter } from '@/hooks/use-resolved-schedule-filter';
 
 interface Member {
   id: string;
@@ -69,7 +70,7 @@ interface Assignment {
   description?: string | null;
   startDate: string;
   endDate: string;
-  status: AssignmentStatus;
+  displayStatus: DisplayStatus;
   requestId?: string | null;
   request?: {
     id: string;
@@ -1069,15 +1070,15 @@ export function ScheduleView({ zoomLevel, onZoomIn, onZoomOut, onZoomReset }: Re
 
   // Mutation for updating assignment display status (for non-request assignments)
   const updateDisplayStatusMutation = useMutation({
-    mutationFn: ({ id, displayStatus }: { id: string; displayStatus: string | null }) =>
-      api.put(`/assignments/${id}`, { metadata: { displayStatus } }),
+    mutationFn: ({ id, displayStatus }: { id: string; displayStatus: DisplayStatus }) =>
+      api.put(`/assignments/${id}`, { displayStatus }),
     onSuccess: (_data, variables) => {
       setShowStatusPopover(false);
-      // Optimistically update the selected assignment's metadata
+      // Optimistically update the selected assignment
       if (selectedAssignment?.id === variables.id) {
         setSelectedAssignment({
           ...selectedAssignment,
-          metadata: { ...selectedAssignment.metadata, displayStatus: variables.displayStatus },
+          displayStatus: variables.displayStatus,
         });
       }
       // Optimistically update the assignment in all schedule query caches
@@ -1088,7 +1089,7 @@ export function ScheduleView({ zoomLevel, onZoomIn, onZoomOut, onZoomReset }: Re
         if (!cachedData) continue;
         const idx = cachedData.data.assignments.findIndex((a) => a.id === variables.id);
         if (idx === -1) continue;
-        const updated = { ...cachedData.data.assignments[idx], metadata: { ...cachedData.data.assignments[idx].metadata, displayStatus: variables.displayStatus } };
+        const updated = { ...cachedData.data.assignments[idx], displayStatus: variables.displayStatus };
         const newAssignments = [...cachedData.data.assignments];
         newAssignments[idx] = updated;
         queryClient.setQueryData(queryKey, {
@@ -1234,17 +1235,28 @@ export function ScheduleView({ zoomLevel, onZoomIn, onZoomOut, onZoomReset }: Re
     return months;
   }, [baseMonth, monthsBefore, monthsAfter]);
 
+  // MEMBERs can only see SCHEDULED assignments; the server ignores this flag for them,
+  // but we send false to keep the request honest about intent.
+  const includeUnscheduledAndForecasts = user?.role !== Role.MEMBER;
+
+  // Per-user MEMBER schedule visibility filter (no-op for non-MEMBER or mode === ALL)
+  const scheduleFilter = useResolvedScheduleFilter();
+  const memberIdsParam = scheduleFilter.filtered ? scheduleFilter.memberIds.join(',') : null;
+  const skipFetch = scheduleFilter.filtered && scheduleFilter.memberIds.length === 0;
+
   // Fetch each month independently so new months load without refetching existing ones
   const monthQueries = useQueries({
     queries: monthsToLoad.map(month => ({
-      queryKey: ['schedule', month.startDate, month.endDate],
+      queryKey: ['schedule', month.startDate, month.endDate, includeUnscheduledAndForecasts, memberIdsParam],
       queryFn: () =>
         api.get<ScheduleData>('/assignments/calendar', {
           startDate: month.startDate,
           endDate: month.endDate,
-          includeUnscheduledAndForecasts: 'true',
+          includeUnscheduledAndForecasts: String(includeUnscheduledAndForecasts),
+          ...(memberIdsParam ? { memberIds: memberIdsParam } : {}),
         }),
       staleTime: 5 * 60 * 1000,
+      enabled: !skipFetch,
     })),
   });
 
@@ -2021,17 +2033,23 @@ export function ScheduleView({ zoomLevel, onZoomIn, onZoomOut, onZoomReset }: Re
   const handleStatusShortcut = useCallback((code: string): boolean => {
     if (!selectedAssignment || !canModifyAssignments) return false;
 
-    const statusMap: Record<string, RequestStatus> = {
-      'Digit1': RequestStatus.SCHEDULED,
-      'Digit2': RequestStatus.FORECAST,
-      'Digit3': RequestStatus.UNSCHEDULED,
-    };
-    const status = statusMap[code];
-    if (!status) return false;
-
     if (selectedAssignment.requestId) {
+      const requestStatusMap: Record<string, RequestStatus> = {
+        'Digit1': RequestStatus.SCHEDULED,
+        'Digit2': RequestStatus.FORECAST,
+        'Digit3': RequestStatus.UNSCHEDULED,
+      };
+      const status = requestStatusMap[code];
+      if (!status) return false;
       updateRequestStatusMutation.mutate({ requestId: selectedAssignment.requestId, status });
     } else {
+      const displayStatusMap: Record<string, DisplayStatus> = {
+        'Digit1': DisplayStatus.SCHEDULED,
+        'Digit2': DisplayStatus.FORECAST,
+        'Digit3': DisplayStatus.UNSCHEDULED,
+      };
+      const status = displayStatusMap[code];
+      if (!status) return false;
       updateDisplayStatusMutation.mutate({ id: selectedAssignment.id, displayStatus: status });
     }
     return true;
@@ -2825,6 +2843,23 @@ export function ScheduleView({ zoomLevel, onZoomIn, onZoomOut, onZoomReset }: Re
     );
   }, [draggedAssignment, dragTargetDayIndex, getHighlightedWeeksForMove]);
 
+  // Custom filter resolved to no visible members (e.g. no linked member and no selections).
+  // Show a friendly notice instead of an empty grid.
+  if (scheduleFilter.empty) {
+    return (
+      <div className="flex h-full items-center justify-center p-8">
+        <div className="max-w-md rounded-lg border border-border bg-card p-6 text-center">
+          <h3 className="text-lg font-semibold">No visible members</h3>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Your schedule visibility is set to a custom filter, but it currently includes no
+            members. Ask an administrator to link your user to a member or to add departments or
+            members to your visible set in User Management.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   // Show skeleton loader only on initial load (no cached data available)
   if (isLoading && !data) {
     return (
@@ -3340,7 +3375,7 @@ export function ScheduleView({ zoomLevel, onZoomIn, onZoomOut, onZoomReset }: Re
                       <button
                         className="flex items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-accent text-left"
                         onClick={() => {
-                          updateDisplayStatusMutation.mutate({ id: selectedAssignment.id, displayStatus: 'SCHEDULED' });
+                          updateDisplayStatusMutation.mutate({ id: selectedAssignment.id, displayStatus: DisplayStatus.SCHEDULED });
                         }}
                       >
                         <CalendarCheck className="shrink-0 text-emerald-500" style={{ width: 16, height: 16 }} />
@@ -3349,7 +3384,7 @@ export function ScheduleView({ zoomLevel, onZoomIn, onZoomOut, onZoomReset }: Re
                       <button
                         className="flex items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-accent text-left"
                         onClick={() => {
-                          updateDisplayStatusMutation.mutate({ id: selectedAssignment.id, displayStatus: 'UNSCHEDULED' });
+                          updateDisplayStatusMutation.mutate({ id: selectedAssignment.id, displayStatus: DisplayStatus.UNSCHEDULED });
                         }}
                       >
                         <Clock4 className="shrink-0" style={{ width: 16, height: 16 }} />
@@ -3358,7 +3393,7 @@ export function ScheduleView({ zoomLevel, onZoomIn, onZoomOut, onZoomReset }: Re
                       <button
                         className="flex items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-accent text-left"
                         onClick={() => {
-                          updateDisplayStatusMutation.mutate({ id: selectedAssignment.id, displayStatus: 'FORECAST' });
+                          updateDisplayStatusMutation.mutate({ id: selectedAssignment.id, displayStatus: DisplayStatus.FORECAST });
                         }}
                       >
                         <TrendingUp className="shrink-0 text-yellow-400" style={{ width: 16, height: 16 }} />

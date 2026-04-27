@@ -1,7 +1,9 @@
 import { useState, useMemo, useEffect, useCallback } from 'react';
 import { useInfiniteQuery, useQueries } from '@tanstack/react-query';
 import { api } from '@/lib/api';
-import { RequestStatus } from '@ghostcast/shared';
+import { RequestStatus, Role } from '@ghostcast/shared';
+import { useAuth } from '@/features/auth/AuthProvider';
+import { hasMinimumRole } from '@/lib/route-permissions';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -307,6 +309,9 @@ export function RequestsPanel({
   highlightedRequestId,
   monthsToLoad,
 }: Readonly<RequestsPanelProps>) {
+  const { user } = useAuth();
+  const canSeeUnconfirmed = !!user && hasMinimumRole(user.role, Role.REQUESTER);
+
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [selectedRequestId, setSelectedRequestId] = useState<string | null>(null);
@@ -327,8 +332,9 @@ export function RequestsPanel({
   }, []);
 
   // UNSCHEDULED and FORECAST: simple paginated queries (no date range dependency)
-  const unscheduledQuery = usePaginatedRequests(RequestStatus.UNSCHEDULED, debouncedSearch);
-  const forecastQuery = usePaginatedRequests(RequestStatus.FORECAST, debouncedSearch);
+  // Disabled for MEMBER role — they're only allowed to see SCHEDULED items.
+  const unscheduledQuery = usePaginatedRequests(RequestStatus.UNSCHEDULED, debouncedSearch, canSeeUnconfirmed);
+  const forecastQuery = usePaginatedRequests(RequestStatus.FORECAST, debouncedSearch, canSeeUnconfirmed);
 
   // SCHEDULED: per-month queries when embedded, fallback to paginated in standalone
   const scheduled = useScheduledRequests(monthsToLoad, debouncedSearch);
@@ -347,7 +353,9 @@ export function RequestsPanel({
   const unscheduledTotal = unscheduledQuery.data?.pages[0]?.meta.total ?? 0;
   const forecastTotal = forecastQuery.data?.pages[0]?.meta.total ?? 0;
 
-  const isLoading = unscheduledQuery.isLoading && forecastQuery.isLoading && scheduled.isLoading;
+  const isLoading =
+    scheduled.isLoading &&
+    (!canSeeUnconfirmed || (unscheduledQuery.isLoading && forecastQuery.isLoading));
 
   // Pop-out handler
   const handlePopout = () => {
@@ -413,16 +421,18 @@ export function RequestsPanel({
           <span className="text-sm font-semibold">Requests Panel</span>
         </div>
         <div className="absolute right-2 flex items-center gap-1">
-          {/* Pop-out button - hidden below lg */}
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={handlePopout}
-            className="hidden lg:flex h-7 w-7 hover:bg-violet-500/20"
-            title="Pop out to new window"
-          >
-            <ExternalLink className="h-3.5 w-3.5" />
-          </Button>
+          {/* Pop-out button - hidden below lg, hidden from MEMBER (route is gated) */}
+          {canSeeUnconfirmed && (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={handlePopout}
+              className="hidden lg:flex h-7 w-7 hover:bg-violet-500/20"
+              title="Pop out to new window"
+            >
+              <ExternalLink className="h-3.5 w-3.5" />
+            </Button>
+          )}
           {!isStandalone && (
             <Button
               variant="ghost"
@@ -458,77 +468,81 @@ export function RequestsPanel({
           </div>
         ) : (
           <>
-            {/* Unscheduled Section */}
-            <div className="p-2">
-              <button
-                type="button"
-                onClick={() => toggleSection('unscheduled')}
-                className="flex items-center gap-1.5 text-xs font-medium mb-2 px-1 w-full hover:bg-muted/50 rounded py-1 -my-1 transition-colors"
-              >
-                <ChevronDown
-                  className={cn(
-                    'h-3.5 w-3.5 text-muted-foreground transition-transform',
-                    collapsedSections.unscheduled && '-rotate-90'
+            {canSeeUnconfirmed && (
+              <>
+                {/* Unscheduled Section */}
+                <div className="p-2">
+                  <button
+                    type="button"
+                    onClick={() => toggleSection('unscheduled')}
+                    className="flex items-center gap-1.5 text-xs font-medium mb-2 px-1 w-full hover:bg-muted/50 rounded py-1 -my-1 transition-colors"
+                  >
+                    <ChevronDown
+                      className={cn(
+                        'h-3.5 w-3.5 text-muted-foreground transition-transform',
+                        collapsedSections.unscheduled && '-rotate-90'
+                      )}
+                    />
+                    <Clock className="h-3.5 w-3.5 text-foreground" />
+                    <span className="text-foreground">Unscheduled</span>
+                    <span className="text-muted-foreground">({unscheduledTotal})</span>
+                  </button>
+                  {!collapsedSections.unscheduled && (
+                    <RequestSectionContent
+                      isLoading={unscheduledQuery.isLoading}
+                      requests={unscheduledRequests}
+                      emptyMessage="No unscheduled requests"
+                      total={unscheduledTotal}
+                      hasNextPage={unscheduledQuery.hasNextPage}
+                      isFetchingNextPage={unscheduledQuery.isFetchingNextPage}
+                      onFetchNextPage={() => unscheduledQuery.fetchNextPage()}
+                      onRequestClick={handleRequestClick}
+                      onHighlightRequest={onHighlightRequest}
+                      highlightedRequestId={highlightedRequestId}
+                    />
                   )}
-                />
-                <Clock className="h-3.5 w-3.5 text-foreground" />
-                <span className="text-foreground">Unscheduled</span>
-                <span className="text-muted-foreground">({unscheduledTotal})</span>
-              </button>
-              {!collapsedSections.unscheduled && (
-                <RequestSectionContent
-                  isLoading={unscheduledQuery.isLoading}
-                  requests={unscheduledRequests}
-                  emptyMessage="No unscheduled requests"
-                  total={unscheduledTotal}
-                  hasNextPage={unscheduledQuery.hasNextPage}
-                  isFetchingNextPage={unscheduledQuery.isFetchingNextPage}
-                  onFetchNextPage={() => unscheduledQuery.fetchNextPage()}
-                  onRequestClick={handleRequestClick}
-                  onHighlightRequest={onHighlightRequest}
-                  highlightedRequestId={highlightedRequestId}
-                />
-              )}
-            </div>
+                </div>
 
-            {/* Divider */}
-            <hr className="my-2 mx-2 border-border" />
+                {/* Divider */}
+                <hr className="my-2 mx-2 border-border" />
 
-            {/* Forecast Section */}
-            <div className="p-2">
-              <button
-                type="button"
-                onClick={() => toggleSection('forecast')}
-                className="flex items-center gap-1.5 text-xs font-medium mb-2 px-1 w-full hover:bg-muted/50 rounded py-1 -my-1 transition-colors"
-              >
-                <ChevronDown
-                  className={cn(
-                    'h-3.5 w-3.5 text-muted-foreground transition-transform',
-                    collapsedSections.forecast && '-rotate-90'
+                {/* Forecast Section */}
+                <div className="p-2">
+                  <button
+                    type="button"
+                    onClick={() => toggleSection('forecast')}
+                    className="flex items-center gap-1.5 text-xs font-medium mb-2 px-1 w-full hover:bg-muted/50 rounded py-1 -my-1 transition-colors"
+                  >
+                    <ChevronDown
+                      className={cn(
+                        'h-3.5 w-3.5 text-muted-foreground transition-transform',
+                        collapsedSections.forecast && '-rotate-90'
+                      )}
+                    />
+                    <TrendingUp className="h-3.5 w-3.5 text-yellow-400" />
+                    <span className="text-yellow-500 dark:text-yellow-400">Forecast</span>
+                    <span className="text-muted-foreground">({forecastTotal})</span>
+                  </button>
+                  {!collapsedSections.forecast && (
+                    <RequestSectionContent
+                      isLoading={forecastQuery.isLoading}
+                      requests={forecastRequests}
+                      emptyMessage="No forecast requests"
+                      total={forecastTotal}
+                      hasNextPage={forecastQuery.hasNextPage}
+                      isFetchingNextPage={forecastQuery.isFetchingNextPage}
+                      onFetchNextPage={() => forecastQuery.fetchNextPage()}
+                      onRequestClick={handleRequestClick}
+                      onHighlightRequest={onHighlightRequest}
+                      highlightedRequestId={highlightedRequestId}
+                    />
                   )}
-                />
-                <TrendingUp className="h-3.5 w-3.5 text-yellow-400" />
-                <span className="text-yellow-500 dark:text-yellow-400">Forecast</span>
-                <span className="text-muted-foreground">({forecastTotal})</span>
-              </button>
-              {!collapsedSections.forecast && (
-                <RequestSectionContent
-                  isLoading={forecastQuery.isLoading}
-                  requests={forecastRequests}
-                  emptyMessage="No forecast requests"
-                  total={forecastTotal}
-                  hasNextPage={forecastQuery.hasNextPage}
-                  isFetchingNextPage={forecastQuery.isFetchingNextPage}
-                  onFetchNextPage={() => forecastQuery.fetchNextPage()}
-                  onRequestClick={handleRequestClick}
-                  onHighlightRequest={onHighlightRequest}
-                  highlightedRequestId={highlightedRequestId}
-                />
-              )}
-            </div>
+                </div>
 
-            {/* Divider */}
-            <hr className="my-2 mx-2 border-border" />
+                {/* Divider */}
+                <hr className="my-2 mx-2 border-border" />
+              </>
+            )}
 
             {/* Scheduled Section */}
             <div className="p-2">

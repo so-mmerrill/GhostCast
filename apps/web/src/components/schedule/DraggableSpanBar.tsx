@@ -1,7 +1,7 @@
 import { useState, useEffect, memo } from 'react';
 import { Lock } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { AssignmentStatus, RequestStatus, REQUEST_STATUS_COLORS, AssignmentSelection, getContrastColor } from '@ghostcast/shared';
+import { DisplayStatus, RequestStatus, REQUEST_STATUS_COLORS, AssignmentSelection, getContrastColor } from '@ghostcast/shared';
 import type { ColorMode } from '@/stores/schedule-view-store';
 import { CellPresenceIndicator } from './CellPresenceIndicator';
 import palmTreeBlack from '@/assets/palm_tree_black.png';
@@ -28,7 +28,7 @@ interface Assignment {
   description?: string | null;
   startDate: string;
   endDate: string;
-  status: AssignmentStatus;
+  displayStatus: DisplayStatus;
   request?: {
     id: string;
     status: string;
@@ -158,21 +158,17 @@ function getAssignmentStyle(
   requestColorMap?: Map<string, string>,
   clientColorMap?: Map<string, string>,
 ): { background: string; border: string | null; textColor: string } {
-  // If no linked request, check metadata.displayStatus or default to SCHEDULED
+  // If no linked request, style by the assignment's own displayStatus
   if (!assignment.request) {
-    const displayStatus = assignment.metadata?.displayStatus as string | undefined;
-
-    // If displayStatus is UNSCHEDULED, use unscheduled styling
-    if (displayStatus === 'UNSCHEDULED') {
+    if (assignment.displayStatus === DisplayStatus.UNSCHEDULED) {
       return { background: '#FFFFFF', border: '#000000', textColor: 'black' };
     }
 
-    // If displayStatus is FORECAST, use forecast styling
-    if (displayStatus === 'FORECAST') {
+    if (assignment.displayStatus === DisplayStatus.FORECAST) {
       return { background: '#FEF08A', border: '#000000', textColor: 'black' };
     }
 
-    // Default to SCHEDULED - use base color
+    // SCHEDULED — use base color
     const bg = resolveBaseColor(assignment, colorMode, requestColorMap, clientColorMap);
     return { background: bg, border: '#000000', textColor: getContrastColor(bg) };
   }

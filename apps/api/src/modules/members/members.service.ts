@@ -127,6 +127,16 @@ export class MembersService {
     };
   }
 
+  async listDepartments(): Promise<string[]> {
+    const rows = await this.prisma.member.findMany({
+      where: { isActive: true, department: { not: null } },
+      select: { department: true },
+      distinct: ['department'],
+      orderBy: { department: 'asc' },
+    });
+    return rows.map((r) => r.department).filter((d): d is string => d !== null);
+  }
+
   async findById(id: string) {
     const member = await this.prisma.member.findUnique({
       where: { id },

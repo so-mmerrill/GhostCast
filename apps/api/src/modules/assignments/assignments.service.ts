@@ -5,7 +5,7 @@ import { UpdateAssignmentDto } from './dto/update-assignment.dto';
 import { CalendarQueryDto } from './dto/calendar-query.dto';
 import { PaginationDto } from '../../common/dto/pagination.dto';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
-import { WebSocketEvent } from '@ghostcast/shared';
+import { WebSocketEvent, Role, RequestStatus, DisplayStatus } from '@ghostcast/shared';
 
 @Injectable()
 export class AssignmentsService {
@@ -124,8 +124,9 @@ export class AssignmentsService {
     return assignment;
   }
 
-  async getCalendarView(query: CalendarQueryDto) {
-    const { startDate, endDate, memberIds, projectTypeIds, statuses, includeUnscheduledAndForecasts } = query;
+  async getCalendarView(query: CalendarQueryDto, userRole?: Role) {
+    const { startDate, endDate, memberIds, projectTypeIds, displayStatuses, includeUnscheduledAndForecasts } = query;
+    const isMember = userRole === Role.MEMBER;
 
     // Convert date strings to Date objects for Prisma DateTime fields
     const startDateTime = new Date(startDate);
@@ -149,10 +150,12 @@ export class AssignmentsService {
       ],
     };
 
-    // Build the main where clause
+    // Build the main where clause.
+    // MEMBER role only sees assignments tied to SCHEDULED requests, regardless of the
+    // includeUnscheduledAndForecasts flag the client may have sent.
     let where: Record<string, unknown>;
 
-    if (includeUnscheduledAndForecasts) {
+    if (includeUnscheduledAndForecasts && !isMember) {
       // Include assignments within date range OR linked to unscheduled/forecast requests
       where = {
         OR: [
@@ -165,7 +168,19 @@ export class AssignmentsService {
         ],
       };
     } else {
-      where = dateRangeCondition;
+      where = { ...dateRangeCondition };
+    }
+
+    if (isMember) {
+      // MEMBER sees assignments whose parent request is SCHEDULED, plus orphan
+      // assignments (no parent request) whose displayStatus is SCHEDULED.
+      const memberVisibility = {
+        OR: [
+          { request: { status: RequestStatus.SCHEDULED } },
+          { requestId: null, displayStatus: DisplayStatus.SCHEDULED },
+        ],
+      };
+      where = { AND: [where, memberVisibility] };
     }
 
     if (memberIds && memberIds.length > 0) {
@@ -180,8 +195,8 @@ export class AssignmentsService {
       where.projectTypeId = { in: projectTypeIds };
     }
 
-    if (statuses && statuses.length > 0) {
-      where.status = { in: statuses };
+    if (displayStatuses && displayStatuses.length > 0) {
+      where.displayStatus = { in: displayStatuses };
     }
 
     // Run both queries in parallel for better performance

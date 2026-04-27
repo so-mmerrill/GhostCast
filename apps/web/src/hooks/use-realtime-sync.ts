@@ -1,18 +1,29 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { io, Socket } from 'socket.io-client';
-import { WebSocketEvent } from '@ghostcast/shared';
+import { WebSocketEvent, RequestStatus, Role } from '@ghostcast/shared';
 import { api } from '@/lib/api';
 import { useAuth } from '@/features/auth/AuthProvider';
-import { upsertAssignmentInCache, removeAssignmentFromCache, updateRequestStatusInCache, updateRequestStatusInPaginatedCache, updateRequestTitleInCache, upsertMemberInCache, removeMemberFromCache, type CalendarMember } from '@/lib/schedule-cache';
+import { hasMinimumRole } from '@/lib/route-permissions';
+import { useResolvedScheduleFilter } from '@/hooks/use-resolved-schedule-filter';
+import { upsertAssignmentInCache, removeAssignmentFromCache, removeAssignmentsByRequestIdFromCache, updateRequestStatusInCache, updateRequestStatusInPaginatedCache, updateRequestTitleInCache, upsertMemberInCache, removeMemberFromCache, type CalendarMember } from '@/lib/schedule-cache';
 
 const WS_URL = import.meta.env.VITE_WS_URL || undefined;
 
 export function useRealtimeSync() {
   const queryClient = useQueryClient();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user } = useAuth();
   const socketRef = useRef<Socket | null>(null);
   const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Track current role in a ref so the long-lived socket handlers always read the latest value
+  const isMemberRef = useRef(false);
+  isMemberRef.current = !!user && !hasMinimumRole(user.role, Role.REQUESTER);
+
+  // Track the MEMBER's resolved schedule filter so socket handlers can drop assignments
+  // for members outside the visibility set. `null` means "no filter".
+  const scheduleFilter = useResolvedScheduleFilter();
+  const filterMemberIdsRef = useRef<Set<string> | null>(null);
+  filterMemberIdsRef.current = scheduleFilter.filtered ? new Set(scheduleFilter.memberIds) : null;
 
   const connect = useCallback(() => {
     const token = api.getToken();
@@ -56,13 +67,46 @@ export function useRealtimeSync() {
       console.error('[RealtimeSync] Connection error:', error.message);
     });
 
+    // Mirrors the backend visibility rule for MEMBER role on /assignments/calendar:
+    //  - linked assignment: parent request must be SCHEDULED
+    //  - orphan assignment: assignment.displayStatus must be SCHEDULED
+    //  - if the user has a per-user schedule filter active, the assignment must include
+    //    at least one of the visible memberIds.
+    const isHiddenForMember = (data: { [key: string]: unknown }) => {
+      if (!isMemberRef.current) return false;
+
+      // Status-based hiding
+      const req = data.request as { status?: string } | undefined;
+      if (req) {
+        if (req.status !== RequestStatus.SCHEDULED) return true;
+      } else {
+        const ds = data.displayStatus as string | undefined;
+        if (ds === 'UNSCHEDULED' || ds === 'FORECAST') return true;
+      }
+
+      // Per-user schedule filter (only when active)
+      const filterIds = filterMemberIdsRef.current;
+      if (filterIds !== null) {
+        const members = (data.members as Array<{ memberId?: string; member?: { id?: string } }> | undefined) ?? [];
+        const intersects = members.some((m) => {
+          const id = m.memberId ?? m.member?.id;
+          return id ? filterIds.has(id) : false;
+        });
+        if (!intersects) return true;
+      }
+
+      return false;
+    };
+
     // Listen for assignment events and update caches directly from the payload
     // (the server sends the full assignment object after the DB transaction commits)
     socket.on(WebSocketEvent.ASSIGNMENT_CREATED, (payload: { data: { id: string; startDate?: string; endDate?: string; members?: Array<{ member: { id: string } }>; [key: string]: unknown } }) => {
       // Direct cache upsert from the full server payload — no API round-trip needed.
       // The mutation's onSuccess already handles the member-scoped refreshScheduleCache call,
       // so we only do the direct cache update here to avoid duplicate GETs.
-      if (payload.data.startDate && payload.data.endDate) {
+      if (isHiddenForMember(payload.data)) {
+        removeAssignmentFromCache(queryClient, payload.data.id);
+      } else if (payload.data.startDate && payload.data.endDate) {
         upsertAssignmentInCache(queryClient, payload.data as { id: string; startDate: string; endDate: string; [key: string]: unknown });
       }
       queryClient.invalidateQueries({ queryKey: ['requests-for-schedule'], refetchType: 'all' });
@@ -70,7 +114,9 @@ export function useRealtimeSync() {
     });
 
     socket.on(WebSocketEvent.ASSIGNMENT_UPDATED, (payload: { data: { id: string; startDate?: string; endDate?: string; members?: Array<{ member: { id: string } }>; [key: string]: unknown } }) => {
-      if (payload.data.startDate && payload.data.endDate) {
+      if (isHiddenForMember(payload.data)) {
+        removeAssignmentFromCache(queryClient, payload.data.id);
+      } else if (payload.data.startDate && payload.data.endDate) {
         upsertAssignmentInCache(queryClient, payload.data as { id: string; startDate: string; endDate: string; [key: string]: unknown });
       }
       queryClient.invalidateQueries({ queryKey: ['requests-for-schedule'], refetchType: 'all' });
@@ -103,6 +149,17 @@ export function useRealtimeSync() {
       if (requestId && requestStatus) {
         updateRequestStatusInCache(queryClient, requestId, requestStatus);
         updateRequestStatusInPaginatedCache(queryClient, requestId, requestStatus);
+
+        // MEMBER role only sees SCHEDULED requests/assignments — refetch the schedule when
+        // a request just became SCHEDULED so the newly visible assignments appear, or drop
+        // linked assignments immediately if the parent request just left SCHEDULED.
+        if (isMemberRef.current) {
+          if (requestStatus === RequestStatus.SCHEDULED) {
+            queryClient.invalidateQueries({ queryKey: ['schedule'], refetchType: 'all' });
+          } else {
+            removeAssignmentsByRequestIdFromCache(queryClient, requestId);
+          }
+        }
       } else {
         // Non-status update — refresh all paginated request caches
         queryClient.invalidateQueries({ queryKey: ['requests-paginated'], refetchType: 'all' });

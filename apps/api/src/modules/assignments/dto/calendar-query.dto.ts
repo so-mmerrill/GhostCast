@@ -7,7 +7,7 @@ import {
   IsBoolean,
 } from 'class-validator';
 import { Transform } from 'class-transformer';
-import { AssignmentStatus } from '@ghostcast/shared';
+import { DisplayStatus } from '@ghostcast/shared';
 
 export class CalendarQueryDto {
   @IsDateString()
@@ -29,10 +29,10 @@ export class CalendarQueryDto {
   projectTypeIds?: string[];
 
   @IsArray()
-  @IsEnum(AssignmentStatus, { each: true })
+  @IsEnum(DisplayStatus, { each: true })
   @IsOptional()
   @Transform(({ value }) => (typeof value === 'string' ? value.split(',') : value))
-  statuses?: AssignmentStatus[];
+  displayStatuses?: DisplayStatus[];
 
   @IsBoolean()
   @IsOptional()

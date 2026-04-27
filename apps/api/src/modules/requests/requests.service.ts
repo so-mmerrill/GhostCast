@@ -4,7 +4,7 @@ import { CreateRequestDto } from './dto/create-request.dto';
 import { UpdateRequestDto } from './dto/update-request.dto';
 import { QueryRequestDto } from './dto/query-request.dto';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
-import { WebSocketEvent, RequestStatus } from '@ghostcast/shared';
+import { WebSocketEvent, RequestStatus, Role } from '@ghostcast/shared';
 
 const requestInclude = {
   requester: {
@@ -129,9 +129,13 @@ export class RequestsService {
     }
   }
 
-  async findAll(query: QueryRequestDto) {
+  async findAll(query: QueryRequestDto, userRole?: Role) {
     const { page = 1, pageSize = 20, search, sortBy, sortOrder = 'desc' } = query;
     const skip = (page - 1) * pageSize;
+
+    if (userRole === Role.MEMBER) {
+      query = { ...query, status: RequestStatus.SCHEDULED, statuses: undefined };
+    }
 
     const where: Record<string, unknown> = {};
 
@@ -176,13 +180,17 @@ export class RequestsService {
     };
   }
 
-  async findById(id: string) {
+  async findById(id: string, userRole?: Role) {
     const request = await this.prisma.request.findUnique({
       where: { id },
       include: requestInclude,
     });
 
     if (!request) {
+      throw new NotFoundException('Request not found');
+    }
+
+    if (userRole === Role.MEMBER && request.status !== RequestStatus.SCHEDULED) {
       throw new NotFoundException('Request not found');
     }
 

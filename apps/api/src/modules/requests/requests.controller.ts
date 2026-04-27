@@ -32,15 +32,18 @@ export class RequestsController {
   constructor(private readonly requestsService: RequestsService) {}
 
   @Get()
-  @Roles(Role.REQUESTER)
-  async findAll(@Query() query: QueryRequestDto) {
-    return this.requestsService.findAll(query);
+  @Roles(Role.MEMBER)
+  async findAll(
+    @Query() query: QueryRequestDto,
+    @CurrentUser() user: UserPayload
+  ) {
+    return this.requestsService.findAll(query, user.role);
   }
 
   @Get(':id')
-  @Roles(Role.REQUESTER)
-  async findOne(@Param('id') id: string) {
-    return this.requestsService.findById(id);
+  @Roles(Role.MEMBER)
+  async findOne(@Param('id') id: string, @CurrentUser() user: UserPayload) {
+    return this.requestsService.findById(id, user.role);
   }
 
   @Post()

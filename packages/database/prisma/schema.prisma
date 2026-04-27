@@ -23,11 +23,10 @@ enum Role {
   UNASSIGNED
 }
 
-enum AssignmentStatus {
+enum DisplayStatus {
   SCHEDULED
-  IN_PROGRESS
-  COMPLETED
-  CANCELLED
+  UNSCHEDULED
+  FORECAST
 }
 
 enum RequestStatus {
@@ -112,14 +111,14 @@ model Member {
 }
 
 model Assignment {
-  id            String           @id @default(cuid())
+  id            String        @id @default(cuid())
   title         String
   description   String?
   startDate     DateTime
   endDate       DateTime
   projectTypeId String
-  status        AssignmentStatus @default(SCHEDULED)
-  metadata      Json             @default("{}")
+  displayStatus DisplayStatus @default(SCHEDULED)
+  metadata      Json          @default("{}")
   requestId     String?
 
   createdAt   DateTime @default(now())
@@ -136,7 +135,7 @@ model Assignment {
   projectRoles   AssignmentProjectRole[]
 
   @@index([startDate, endDate])
-  @@index([status])
+  @@index([displayStatus])
   @@index([projectTypeId])
   @@index([createdById])
   @@index([requestId])

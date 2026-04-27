@@ -19,8 +19,8 @@ export const ROUTE_PERMISSIONS: Record<string, RoutePermission> = {
   // Schedule page - all authenticated users can view
   '/': { minRole: Role.MEMBER },
 
-  // Members page - all authenticated users can view
-  '/members': { minRole: Role.MEMBER },
+  // Members page - requester and above (MEMBER role is restricted to Schedule)
+  '/members': { minRole: Role.REQUESTER },
 
   // Admin page - admin only
   '/admin': { minRole: Role.ADMIN },
@@ -31,8 +31,11 @@ export const ROUTE_PERMISSIONS: Record<string, RoutePermission> = {
   // Dashboards page - managers and above
   '/dashboards': { minRole: Role.MANAGER },
 
-  // Integrations page - all users (users see only user-scoped plugins, admins see all)
-  '/integrations': { minRole: Role.MEMBER },
+  // Integrations page - requester and above (MEMBER role is restricted to Schedule)
+  '/integrations': { minRole: Role.REQUESTER },
+
+  // Standalone Requests Panel popout - requester and above (MEMBER cannot view unscheduled/forecast requests)
+  '/requests-panel': { minRole: Role.REQUESTER },
 };
 
 /** Default permission for routes not explicitly configured */

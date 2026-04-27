@@ -31,6 +31,12 @@ export class MembersController {
     return this.membersService.findAll(pagination);
   }
 
+  @Get('departments')
+  @Roles(Role.MEMBER)
+  async listDepartments() {
+    return this.membersService.listDepartments();
+  }
+
   @Get(':id')
   @Permissions({ resource: 'members', action: 'read' })
   async findOne(@Param('id') id: string) {

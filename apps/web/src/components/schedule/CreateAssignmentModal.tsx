@@ -411,8 +411,8 @@ export function CreateAssignmentModal({
         formatterIds: selectedFormatterIds.length > 0 ? selectedFormatterIds : undefined,
         projectRoleIds: selectedProjectRoleIds.length > 0 ? selectedProjectRoleIds : undefined,
         requestId: selectedRequestId === 'manual' ? undefined : selectedRequestId,
+        ...(selectedRequestId === 'manual' ? { displayStatus } : {}),
         metadata: {
-          ...(selectedRequestId === 'manual' ? { displayStatus } : {}),
           ...(isLocked ? { isLocked: true } : {}),
         },
       };

@@ -33,8 +33,11 @@ export class AssignmentsController {
   }
 
   @Get('calendar')
-  async getCalendarView(@Query() query: CalendarQueryDto) {
-    return this.assignmentsService.getCalendarView(query);
+  async getCalendarView(
+    @Query() query: CalendarQueryDto,
+    @CurrentUser() user: User
+  ) {
+    return this.assignmentsService.getCalendarView(query, user.role as Role);
   }
 
   @Get(':id')

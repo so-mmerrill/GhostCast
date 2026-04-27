@@ -75,9 +75,9 @@ export class AdminService {
       }),
     ]);
 
-    // Assignment status breakdown
+    // Assignment displayStatus breakdown
     const assignmentsByStatus = await this.prisma.assignment.groupBy({
-      by: ['status'],
+      by: ['displayStatus'],
       _count: true,
     });
 
@@ -99,8 +99,8 @@ export class AdminService {
       assignments: {
         total: assignmentsCount,
         byStatus: assignmentsByStatus.reduce(
-          (acc: Record<string, number>, item: { status: string; _count: number }) => {
-            acc[item.status] = item._count;
+          (acc: Record<string, number>, item: { displayStatus: string; _count: number }) => {
+            acc[item.displayStatus] = item._count;
             return acc;
           },
           {} as Record<string, number>
