@@ -1893,43 +1893,29 @@ export function ScheduleView({ zoomLevel, onZoomIn, onZoomOut, onZoomReset }: Re
   const handlePaste = useCallback(async () => {
     if (!clipboardAssignment || !clipboardSourceMemberId) return;
 
-    // Determine target from either a selected assignment or selected cells
+    // Determine target member, target dates, and any assignment being replaced
     let targetMemberId: string;
-    let targetWeekMonday: Date;
+    let newStartDate: string;
+    let newEndDate: string;
     let assignmentToReplace: Assignment | null = null;
 
-    if (selectedAssignment && selectedAssignmentMemberId) {
-      // Paste onto a selected assignment: replace it
-      targetMemberId = selectedAssignmentMemberId;
-      targetWeekMonday = startOfWeek(parseLocalDate(selectedAssignment.startDate), { weekStartsOn: 1 });
-      assignmentToReplace = selectedAssignment;
-    } else if (selectedMemberForDrag && selectedDays.size > 0) {
-      // Paste onto selected cells
+    if (selectedMemberForDrag && selectedDays.size > 0) {
+      // Paste onto selected cells: use the exact selected date range
       targetMemberId = selectedMemberForDrag;
       const selectedDaysSorted = Array.from(selectedDays)
         .map(d => parseLocalDate(d))
         .sort((a, b) => a.getTime() - b.getTime());
-      const targetDate = selectedDaysSorted[0];
-      targetWeekMonday = startOfWeek(targetDate, { weekStartsOn: 1 });
+      newStartDate = format(selectedDaysSorted[0], 'yyyy-MM-dd');
+      newEndDate = format(selectedDaysSorted[selectedDaysSorted.length - 1], 'yyyy-MM-dd');
+    } else if (selectedAssignment && selectedAssignmentMemberId) {
+      // Paste onto a selected assignment: replace it in place
+      targetMemberId = selectedAssignmentMemberId;
+      newStartDate = selectedAssignment.startDate;
+      newEndDate = selectedAssignment.endDate;
+      assignmentToReplace = selectedAssignment;
     } else {
       return;
     }
-
-    // Calculate original assignment's position within its week
-    const originalStart = parseLocalDate(clipboardAssignment.startDate);
-    const originalEnd = parseLocalDate(clipboardAssignment.endDate);
-    const duration = differenceInDays(originalEnd, originalStart);
-    const originalWeekMonday = startOfWeek(originalStart, { weekStartsOn: 1 });
-    const dayOfWeekOffset = differenceInDays(originalStart, originalWeekMonday);
-
-    // Calculate new dates (preserve day-of-week position in target week)
-    const newStart = new Date(targetWeekMonday);
-    newStart.setDate(newStart.getDate() + dayOfWeekOffset);
-    const newEnd = new Date(newStart);
-    newEnd.setDate(newEnd.getDate() + duration);
-
-    const newStartDate = format(newStart, 'yyyy-MM-dd');
-    const newEndDate = format(newEnd, 'yyyy-MM-dd');
 
     // Helper to find target member from data
     const findTargetMember = (): Member | undefined => {
