@@ -4,6 +4,7 @@ import {
   ConflictException,
   BadRequestException,
 } from '@nestjs/common';
+import { Prisma } from '@ghostcast/database';
 import * as argon2 from 'argon2';
 import { PrismaService } from '../../database/prisma.service';
 import { CreateUserDto } from './dto/create-user.dto';
@@ -159,6 +160,10 @@ export class UsersService {
         firstName: createUserDto.firstName,
         lastName: createUserDto.lastName,
         role: createUserDto.role,
+        mustResetPassword: createUserDto.mustResetPassword,
+        ...(createUserDto.preferences !== undefined && {
+          preferences: createUserDto.preferences as Prisma.InputJsonValue,
+        }),
       },
       select: {
         id: true,

@@ -68,6 +68,8 @@ export interface UserCreateInput {
   firstName: string;
   lastName: string;
   role?: Role;
+  mustResetPassword?: boolean;
+  preferences?: Record<string, unknown>;
 }
 
 export interface UserUpdateInput {
