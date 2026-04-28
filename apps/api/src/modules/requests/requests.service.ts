@@ -53,7 +53,8 @@ export class RequestsService {
   private buildStatusConditionsWithDateRange(
     statuses: string[],
     startDateTime: Date,
-    endDateTime: Date
+    endDateTime: Date,
+    memberIds?: string[]
   ): Record<string, unknown>[] {
     const conditions: Record<string, unknown>[] = [];
 
@@ -64,17 +65,24 @@ export class RequestsService {
       conditions.push({ status: 'FORECAST' });
     }
     if (statuses.includes('SCHEDULED')) {
+      const dateMatch = {
+        OR: [
+          { startDate: { gte: startDateTime, lte: endDateTime } },
+          { endDate: { gte: startDateTime, lte: endDateTime } },
+          { AND: [{ startDate: { lte: startDateTime } }, { endDate: { gte: endDateTime } }] },
+        ],
+      };
+      const someMatch = memberIds?.length
+        ? {
+            AND: [
+              dateMatch,
+              { members: { some: { memberId: { in: memberIds } } } },
+            ],
+          }
+        : dateMatch;
       conditions.push({
         status: 'SCHEDULED',
-        assignments: {
-          some: {
-            OR: [
-              { startDate: { gte: startDateTime, lte: endDateTime } },
-              { endDate: { gte: startDateTime, lte: endDateTime } },
-              { AND: [{ startDate: { lte: startDateTime } }, { endDate: { gte: endDateTime } }] },
-            ],
-          },
-        },
+        assignments: { some: someMatch },
       });
     }
 
@@ -85,12 +93,14 @@ export class RequestsService {
     where: Record<string, unknown>,
     statusList: string[],
     scheduledWithinStartDate: string,
-    scheduledWithinEndDate: string
+    scheduledWithinEndDate: string,
+    memberIds?: string[]
   ): void {
     const conditions = this.buildStatusConditionsWithDateRange(
       statusList,
       new Date(scheduledWithinStartDate),
-      new Date(scheduledWithinEndDate)
+      new Date(scheduledWithinEndDate),
+      memberIds
     );
     if (conditions.length === 0) return;
 
@@ -107,13 +117,18 @@ export class RequestsService {
     where: Record<string, unknown>,
     query: QueryRequestDto
   ): void {
-    const { status, statuses, scheduledWithinStartDate, scheduledWithinEndDate } = query;
+    const { status, statuses, scheduledWithinStartDate, scheduledWithinEndDate, memberIds } = query;
 
     if (status) {
       if (status === 'SCHEDULED' && scheduledWithinStartDate && scheduledWithinEndDate) {
-        this.applyScheduledDateFilter(where, [status], scheduledWithinStartDate, scheduledWithinEndDate);
+        this.applyScheduledDateFilter(where, [status], scheduledWithinStartDate, scheduledWithinEndDate, memberIds);
       } else {
         where.status = status;
+        if (status === 'SCHEDULED' && memberIds?.length) {
+          where.assignments = {
+            some: { members: { some: { memberId: { in: memberIds } } } },
+          };
+        }
       }
       return;
     }
@@ -123,9 +138,14 @@ export class RequestsService {
     }
 
     if (scheduledWithinStartDate && scheduledWithinEndDate) {
-      this.applyScheduledDateFilter(where, statuses, scheduledWithinStartDate, scheduledWithinEndDate);
+      this.applyScheduledDateFilter(where, statuses, scheduledWithinStartDate, scheduledWithinEndDate, memberIds);
     } else {
       where.status = { in: statuses };
+      if (statuses.includes(RequestStatus.SCHEDULED) && memberIds?.length) {
+        where.assignments = {
+          some: { members: { some: { memberId: { in: memberIds } } } },
+        };
+      }
     }
   }
 

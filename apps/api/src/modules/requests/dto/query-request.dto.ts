@@ -1,4 +1,4 @@
-import { IsOptional, IsEnum, IsArray, IsDateString } from 'class-validator';
+import { IsOptional, IsEnum, IsArray, IsDateString, IsString } from 'class-validator';
 import { Transform } from 'class-transformer';
 import { PaginationDto } from '../../../common/dto/pagination.dto';
 import { RequestStatus } from '@ghostcast/shared';
@@ -21,4 +21,10 @@ export class QueryRequestDto extends PaginationDto {
   @IsOptional()
   @IsDateString()
   scheduledWithinEndDate?: string;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  @Transform(({ value }) => (typeof value === 'string' ? value.split(',') : value))
+  memberIds?: string[];
 }

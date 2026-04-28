@@ -2469,6 +2469,7 @@ export function ScheduleView({ zoomLevel, onZoomIn, onZoomOut, onZoomReset }: Re
 
   // Drop zone handlers for Select mode drag-and-drop
   const handleDragOver = useCallback((e: React.DragEvent, memberId: string) => {
+    if (!canModifyAssignments) return;
     e.preventDefault();
     if (!draggedAssignment) return;
 
@@ -2485,7 +2486,7 @@ export function ScheduleView({ zoomLevel, onZoomIn, onZoomOut, onZoomReset }: Re
       const clampedDayIndex = Math.max(0, Math.min(dayIndex, weekdays.length - 1));
       setDragTargetDayIndex(clampedDayIndex);
     }
-  }, [draggedAssignment, weekdays.length]);
+  }, [canModifyAssignments, draggedAssignment, weekdays.length]);
 
   const handleDragLeave = useCallback((e: React.DragEvent) => {
     // Only clear if leaving the row entirely (not entering a child)
@@ -2496,6 +2497,7 @@ export function ScheduleView({ zoomLevel, onZoomIn, onZoomOut, onZoomReset }: Re
   }, []);
 
   const handleDrop = useCallback((e: React.DragEvent, targetMemberId: string) => {
+    if (!canModifyAssignments) return;
     e.preventDefault();
     setDropTargetMemberId(null);
     setDragTargetDayIndex(null);
@@ -2559,12 +2561,13 @@ export function ScheduleView({ zoomLevel, onZoomIn, onZoomOut, onZoomReset }: Re
     } catch {
       // Invalid drag data, ignore
     }
-  }, [weekdays, handleAssignmentDropWithDates]);
+  }, [canModifyAssignments, weekdays, handleAssignmentDropWithDates]);
 
   const handleDragStartCallback = useCallback((data: DragData) => {
+    if (!canModifyAssignments) return;
     setDraggedAssignment(data);
     clearAssignmentSelection();
-  }, [clearAssignmentSelection]);
+  }, [canModifyAssignments, clearAssignmentSelection]);
 
   const handleDragEndCallback = useCallback(() => {
     setDraggedAssignment(null);

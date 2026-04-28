@@ -21,6 +21,7 @@ import {
 import { cn } from '@/lib/utils';
 import { RequestCard, RequestCardData } from './RequestCard';
 import { RequestDetailModal } from './RequestDetailModal';
+import { useResolvedScheduleFilter } from '@/hooks/use-resolved-schedule-filter';
 
 const PAGE_SIZE = 20;
 
@@ -200,16 +201,18 @@ function normalizeResponse(
 function usePaginatedRequests(
   status: RequestStatus,
   search: string,
-  enabled: boolean = true
+  enabled: boolean = true,
+  memberIdsParam: string | null = null
 ) {
   return useInfiniteQuery<PaginatedResponse>({
-    queryKey: ['requests-paginated', status, search],
+    queryKey: ['requests-paginated', status, search, memberIdsParam],
     queryFn: async ({ pageParam = 1 }) => {
       const response = await api.get<PaginatedResponse | { data: PaginatedResponse } | RequestFromApi[]>('/requests', {
         page: String(pageParam),
         pageSize: String(PAGE_SIZE),
         status,
         ...(search && { search }),
+        ...(memberIdsParam ? { memberIds: memberIdsParam } : {}),
       });
       return normalizeResponse(response);
     },
@@ -229,11 +232,13 @@ const SCHEDULED_MONTH_PAGE_SIZE = 100;
 // Per-month loading for SCHEDULED requests — one query per visible month
 function useScheduledRequestsByMonth(
   monthsToLoad: Array<{ startDate: string; endDate: string }>,
-  search: string
+  search: string,
+  memberIdsParam: string | null = null,
+  enabled: boolean = true
 ) {
   return useQueries({
     queries: monthsToLoad.map(month => ({
-      queryKey: ['requests-paginated', 'scheduled-monthly', month.startDate, month.endDate, search],
+      queryKey: ['requests-paginated', 'scheduled-monthly', month.startDate, month.endDate, search, memberIdsParam],
       queryFn: async () => {
         const response = await api.get<PaginatedResponse | { data: PaginatedResponse } | RequestFromApi[]>('/requests', {
           page: '1',
@@ -242,10 +247,12 @@ function useScheduledRequestsByMonth(
           scheduledWithinStartDate: month.startDate,
           scheduledWithinEndDate: month.endDate,
           ...(search && { search }),
+          ...(memberIdsParam ? { memberIds: memberIdsParam } : {}),
         });
         return normalizeResponse(response);
       },
       staleTime: 5 * 60 * 1000,
+      enabled,
     })),
   });
 }
@@ -253,18 +260,23 @@ function useScheduledRequestsByMonth(
 // Combines per-month and fallback scheduled queries into a single interface
 function useScheduledRequests(
   monthsToLoad: Array<{ startDate: string; endDate: string }> | undefined,
-  search: string
+  search: string,
+  memberIdsParam: string | null = null,
+  enabled: boolean = true
 ) {
   const hasMonthlyLoading = !!monthsToLoad && monthsToLoad.length > 0;
 
   const monthQueries = useScheduledRequestsByMonth(
     hasMonthlyLoading ? monthsToLoad : [],
-    search
+    search,
+    memberIdsParam,
+    enabled
   );
   const fallbackQuery = usePaginatedRequests(
     RequestStatus.SCHEDULED,
     search,
-    !hasMonthlyLoading
+    !hasMonthlyLoading && enabled,
+    memberIdsParam
   );
 
   const monthDataVersion = monthQueries.map(q => q.dataUpdatedAt).join(',');
@@ -312,6 +324,12 @@ export function RequestsPanel({
   const { user } = useAuth();
   const canSeeUnconfirmed = !!user && hasMinimumRole(user.role, Role.REQUESTER);
 
+  // MEMBER schedule filter — when active, restrict requests to ones with assignments
+  // for the same set of members the calendar is showing.
+  const scheduleFilter = useResolvedScheduleFilter();
+  const memberIdsParam = scheduleFilter.filtered ? scheduleFilter.memberIds.join(',') : null;
+  const skipFilteredFetch = scheduleFilter.filtered && scheduleFilter.memberIds.length === 0;
+
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [selectedRequestId, setSelectedRequestId] = useState<string | null>(null);
@@ -336,8 +354,9 @@ export function RequestsPanel({
   const unscheduledQuery = usePaginatedRequests(RequestStatus.UNSCHEDULED, debouncedSearch, canSeeUnconfirmed);
   const forecastQuery = usePaginatedRequests(RequestStatus.FORECAST, debouncedSearch, canSeeUnconfirmed);
 
-  // SCHEDULED: per-month queries when embedded, fallback to paginated in standalone
-  const scheduled = useScheduledRequests(monthsToLoad, debouncedSearch);
+  // SCHEDULED: per-month queries when embedded, fallback to paginated in standalone.
+  // When the MEMBER filter resolves to no member ids, skip the fetch entirely (empty result).
+  const scheduled = useScheduledRequests(monthsToLoad, debouncedSearch, memberIdsParam, !skipFilteredFetch);
 
   // Transform paginated data to flat arrays
   const unscheduledRequests = useMemo(
