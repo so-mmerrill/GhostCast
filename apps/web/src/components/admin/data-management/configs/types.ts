@@ -26,7 +26,7 @@ export interface DataFieldConfig {
     maxLength?: number;
     pattern?: string;
   };
-  // For multiselect - endpoint to fetch options dynamically
+  // For select and multiselect - endpoint to fetch options dynamically
   optionsEndpoint?: string;
   optionsQueryKey?: string;
   optionLabelKey?: string;

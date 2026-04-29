@@ -41,6 +41,11 @@ export class UpdateUserDto {
   @IsOptional()
   role?: Role;
 
+  @IsString()
+  @IsOptional()
+  @MaxLength(100)
+  department?: string;
+
   @IsBoolean()
   @IsOptional()
   isActive?: boolean;

@@ -31,6 +31,10 @@ import { DataFieldConfig } from './configs/types';
 import { api } from '@/lib/api';
 import { cn } from '@/lib/utils';
 
+// Sentinel value used to represent "no selection" in select fields
+// (Radix Select disallows empty-string item values).
+const SELECT_NONE = '__none__';
+
 // Helper to extract options array from various API response formats
 function getOptionsArray(response: unknown, field: DataFieldConfig): { value: string; label: string }[] {
   if (!response) return [];
@@ -38,7 +42,7 @@ function getOptionsArray(response: unknown, field: DataFieldConfig): { value: st
   const labelKey = field.optionLabelKey || 'name';
   const valueKey = field.optionValueKey || 'id';
 
-  let items: Record<string, unknown>[] = [];
+  let items: unknown[] = [];
 
   // Handle different response structures
   if (Array.isArray(response)) {
@@ -56,11 +60,72 @@ function getOptionsArray(response: unknown, field: DataFieldConfig): { value: st
   }
 
   return items
-    .filter((item) => item.isActive !== false) // Only show active items
-    .map((item) => ({
-      value: String(item[valueKey]),
-      label: String(item[labelKey]),
-    }));
+    .filter((item) => {
+      if (typeof item === 'string') return true;
+      return (item as { isActive?: unknown }).isActive !== false;
+    })
+    .map((item) => {
+      if (typeof item === 'string') {
+        return { value: item, label: item };
+      }
+      const obj = item as Record<string, unknown>;
+      return {
+        value: String(obj[valueKey]),
+        label: String(obj[labelKey]),
+      };
+    });
+}
+
+// Select field with optional API-fetched options. Falls back to field.options when no endpoint set.
+function SelectField({
+  field,
+  value,
+  onChange,
+}: Readonly<{
+  field: DataFieldConfig;
+  value: string;
+  onChange: (value: string) => void;
+}>) {
+  const { data: optionsResponse, isLoading } = useQuery({
+    queryKey: [field.optionsQueryKey || field.name],
+    queryFn: () => api.get(field.optionsEndpoint || ''),
+    enabled: !!field.optionsEndpoint,
+  });
+
+  const fetchedOptions = field.optionsEndpoint ? getOptionsArray(optionsResponse, field) : [];
+  const options = field.optionsEndpoint ? fetchedOptions : (field.options ?? []);
+
+  if (field.optionsEndpoint && isLoading) {
+    return <div className="text-sm text-muted-foreground">Loading options...</div>;
+  }
+
+  return (
+    <Select
+      value={value || SELECT_NONE}
+      onValueChange={(val) => onChange(val === SELECT_NONE ? '' : val)}
+    >
+      <SelectTrigger>
+        <SelectValue placeholder={field.placeholder || 'Select...'} />
+      </SelectTrigger>
+      <SelectContent>
+        {!field.required && (
+          <SelectItem value={SELECT_NONE}>
+            <span className="text-muted-foreground">None</span>
+          </SelectItem>
+        )}
+        {options.length === 0 && field.optionsEndpoint && (
+          <SelectItem value={SELECT_NONE} disabled>
+            No options available
+          </SelectItem>
+        )}
+        {options.map((option) => (
+          <SelectItem key={option.value} value={option.value}>
+            {option.label}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
 }
 
 // Multiselect field component with API fetching and searchable dropdown
@@ -422,21 +487,11 @@ export function GenericDataForm({
 
       case 'select':
         return (
-          <Select
+          <SelectField
+            field={field}
             value={(value as string) || ''}
-            onValueChange={(val) => handleChange(field.name, val)}
-          >
-            <SelectTrigger>
-              <SelectValue placeholder={field.placeholder || 'Select...'} />
-            </SelectTrigger>
-            <SelectContent>
-              {field.options?.map((option) => (
-                <SelectItem key={option.value} value={option.value}>
-                  {option.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+            onChange={(newValue) => handleChange(field.name, newValue)}
+          />
         );
 
       case 'password':

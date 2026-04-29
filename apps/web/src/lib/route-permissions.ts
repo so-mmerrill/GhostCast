@@ -5,6 +5,8 @@ export interface RoutePermission {
   minRole: Role;
   /** Optional: specific roles allowed (overrides minRole if set) */
   allowedRoles?: Role[];
+  /** Optional: if set, user.department must equal this value (in addition to the role check). */
+  requiredDepartment?: string;
 }
 
 /**
@@ -36,6 +38,9 @@ export const ROUTE_PERMISSIONS: Record<string, RoutePermission> = {
 
   // Standalone Requests Panel popout - requester and above (MEMBER cannot view unscheduled/forecast requests)
   '/requests-panel': { minRole: Role.REQUESTER },
+
+  // Research Projects - any authenticated member, but only those in the Research department
+  '/research-projects': { minRole: Role.MEMBER, requiredDepartment: 'Research' },
 };
 
 /** Default permission for routes not explicitly configured */
@@ -61,18 +66,26 @@ export function hasMinimumRole(userRole: Role, requiredRole: Role): boolean {
 }
 
 /**
- * Check if a user has permission to access a route
+ * Check if a user has permission to access a route. Both role and (when configured)
+ * department must match.
  */
-export function canAccessRoute(userRole: Role, pathname: string): boolean {
+export function canAccessRoute(
+  user: { role: Role; department?: string | null },
+  pathname: string
+): boolean {
   const permission = ROUTE_PERMISSIONS[pathname] ?? DEFAULT_ROUTE_PERMISSION;
 
-  // If specific roles are defined, check against those
-  if (permission.allowedRoles && permission.allowedRoles.length > 0) {
-    return permission.allowedRoles.includes(userRole);
+  const roleOk =
+    permission.allowedRoles && permission.allowedRoles.length > 0
+      ? permission.allowedRoles.includes(user.role)
+      : hasMinimumRole(user.role, permission.minRole);
+  if (!roleOk) return false;
+
+  if (permission.requiredDepartment && user.department !== permission.requiredDepartment) {
+    return false;
   }
 
-  // Otherwise check against minimum role
-  return hasMinimumRole(userRole, permission.minRole);
+  return true;
 }
 
 /**

@@ -45,6 +45,7 @@ export class UsersService {
           firstName: true,
           lastName: true,
           avatar: true,
+          department: true,
           role: true,
           isActive: true,
           mustResetPassword: true,
@@ -79,6 +80,7 @@ export class UsersService {
         firstName: true,
         lastName: true,
         avatar: true,
+        department: true,
         role: true,
         isActive: true,
         mustResetPassword: true,
@@ -160,6 +162,7 @@ export class UsersService {
         firstName: createUserDto.firstName,
         lastName: createUserDto.lastName,
         role: createUserDto.role,
+        department: createUserDto.department || null,
         mustResetPassword: createUserDto.mustResetPassword,
         ...(createUserDto.preferences !== undefined && {
           preferences: createUserDto.preferences as Prisma.InputJsonValue,
@@ -170,6 +173,7 @@ export class UsersService {
         email: true,
         firstName: true,
         lastName: true,
+        department: true,
         role: true,
         isActive: true,
         createdAt: true,
@@ -183,6 +187,11 @@ export class UsersService {
     await this.findById(id); // Ensure user exists
 
     const data: Record<string, unknown> = { ...updateUserDto };
+
+    // Treat empty-string department as a clear (NULL) so the dropdown's "None" choice persists.
+    if (data.department === '') {
+      data.department = null;
+    }
 
     // Handle password separately - hash if provided, always remove from data
     if (updateUserDto.password) {
@@ -204,6 +213,7 @@ export class UsersService {
         firstName: true,
         lastName: true,
         avatar: true,
+        department: true,
         role: true,
         isActive: true,
         mustResetPassword: true,

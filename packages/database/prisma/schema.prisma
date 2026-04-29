@@ -47,6 +47,7 @@ model User {
   firstName    String
   lastName     String
   avatar       String?
+  department   String?
   role         Role     @default(MEMBER)
   isActive          Boolean  @default(true)
   mustResetPassword Boolean  @default(false)
@@ -72,6 +73,7 @@ model User {
   @@index([email])
   @@index([role])
   @@index([isActive])
+  @@index([department])
 }
 
 model Member {

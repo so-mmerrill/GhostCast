@@ -15,6 +15,7 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as ForceResetPasswordRouteImport } from './routes/force-reset-password'
 import { Route as AuthenticatedRouteImport } from './routes/_authenticated'
 import { Route as AuthenticatedIndexRouteImport } from './routes/_authenticated/index'
+import { Route as AuthenticatedResearchProjectsRouteImport } from './routes/_authenticated/research-projects'
 import { Route as AuthenticatedRequestsPanelRouteImport } from './routes/_authenticated/requests-panel'
 import { Route as AuthenticatedRequestsRouteImport } from './routes/_authenticated/requests'
 import { Route as AuthenticatedProfileRouteImport } from './routes/_authenticated/profile'
@@ -52,6 +53,12 @@ const AuthenticatedIndexRoute = AuthenticatedIndexRouteImport.update({
   path: '/',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
+const AuthenticatedResearchProjectsRoute =
+  AuthenticatedResearchProjectsRouteImport.update({
+    id: '/research-projects',
+    path: '/research-projects',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
 const AuthenticatedRequestsPanelRoute =
   AuthenticatedRequestsPanelRouteImport.update({
     id: '/requests-panel',
@@ -102,6 +109,7 @@ export interface FileRoutesByFullPath {
   '/profile': typeof AuthenticatedProfileRoute
   '/requests': typeof AuthenticatedRequestsRoute
   '/requests-panel': typeof AuthenticatedRequestsPanelRoute
+  '/research-projects': typeof AuthenticatedResearchProjectsRoute
   '/': typeof AuthenticatedIndexRoute
 }
 export interface FileRoutesByTo {
@@ -116,6 +124,7 @@ export interface FileRoutesByTo {
   '/profile': typeof AuthenticatedProfileRoute
   '/requests': typeof AuthenticatedRequestsRoute
   '/requests-panel': typeof AuthenticatedRequestsPanelRoute
+  '/research-projects': typeof AuthenticatedResearchProjectsRoute
   '/': typeof AuthenticatedIndexRoute
 }
 export interface FileRoutesById {
@@ -132,6 +141,7 @@ export interface FileRoutesById {
   '/_authenticated/profile': typeof AuthenticatedProfileRoute
   '/_authenticated/requests': typeof AuthenticatedRequestsRoute
   '/_authenticated/requests-panel': typeof AuthenticatedRequestsPanelRoute
+  '/_authenticated/research-projects': typeof AuthenticatedResearchProjectsRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
 }
 export interface FileRouteTypes {
@@ -148,6 +158,7 @@ export interface FileRouteTypes {
     | '/profile'
     | '/requests'
     | '/requests-panel'
+    | '/research-projects'
     | '/'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -162,6 +173,7 @@ export interface FileRouteTypes {
     | '/profile'
     | '/requests'
     | '/requests-panel'
+    | '/research-projects'
     | '/'
   id:
     | '__root__'
@@ -177,6 +189,7 @@ export interface FileRouteTypes {
     | '/_authenticated/profile'
     | '/_authenticated/requests'
     | '/_authenticated/requests-panel'
+    | '/_authenticated/research-projects'
     | '/_authenticated/'
   fileRoutesById: FileRoutesById
 }
@@ -230,6 +243,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof AuthenticatedIndexRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    '/_authenticated/research-projects': {
+      id: '/_authenticated/research-projects'
+      path: '/research-projects'
+      fullPath: '/research-projects'
+      preLoaderRoute: typeof AuthenticatedResearchProjectsRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
     '/_authenticated/requests-panel': {
@@ -292,6 +312,7 @@ interface AuthenticatedRouteChildren {
   AuthenticatedProfileRoute: typeof AuthenticatedProfileRoute
   AuthenticatedRequestsRoute: typeof AuthenticatedRequestsRoute
   AuthenticatedRequestsPanelRoute: typeof AuthenticatedRequestsPanelRoute
+  AuthenticatedResearchProjectsRoute: typeof AuthenticatedResearchProjectsRoute
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
 }
 
@@ -303,6 +324,7 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedProfileRoute: AuthenticatedProfileRoute,
   AuthenticatedRequestsRoute: AuthenticatedRequestsRoute,
   AuthenticatedRequestsPanelRoute: AuthenticatedRequestsPanelRoute,
+  AuthenticatedResearchProjectsRoute: AuthenticatedResearchProjectsRoute,
   AuthenticatedIndexRoute: AuthenticatedIndexRoute,
 }
 

@@ -27,7 +27,7 @@ export const Route = createFileRoute('/_authenticated')({
 
     // Check RBAC permissions if user is authenticated
     if (context.auth.user) {
-      const hasPermission = canAccessRoute(context.auth.user.role, location.pathname);
+      const hasPermission = canAccessRoute(context.auth.user, location.pathname);
       if (!hasPermission) {
         throw redirect({ to: '/unauthorized' });
       }

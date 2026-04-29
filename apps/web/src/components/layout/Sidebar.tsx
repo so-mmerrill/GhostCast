@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate } from '@tanstack/react-router';
 import { useAuth } from '@/features/auth/AuthProvider';
 import { useTheme } from '@/components/theme-provider';
 import { cn } from '@/lib/utils';
-import { CalendarDays, LogOut, Moon, Sun, ChevronLeft, ChevronRight, Users, Shield, ClipboardList, Puzzle, /* BarChart3, */ Menu } from 'lucide-react';
+import { CalendarDays, LogOut, Moon, Sun, ChevronLeft, ChevronRight, Users, Shield, ClipboardList, Puzzle, /* BarChart3, */ Menu, FlaskConical } from 'lucide-react';
 import { Role } from '@ghostcast/shared';
 import { hasMinimumRole } from '@/lib/route-permissions';
 import logo from '@/assets/logo.png';
@@ -23,6 +23,7 @@ type MenuItem = {
   icon: React.ComponentType<{ className?: string }>;
   label: string;
   minRole?: Role;
+  requiredDepartment?: string;
 };
 
 const menuItems: MenuItem[] = [
@@ -31,6 +32,7 @@ const menuItems: MenuItem[] = [
   { to: '/members', icon: Users, label: 'Members', minRole: Role.REQUESTER },
   // { to: '/dashboards', icon: BarChart3, label: 'Dashboards', minRole: Role.MANAGER },
   { to: '/integrations', icon: Puzzle, label: 'Plugins', minRole: Role.REQUESTER },
+  { to: '/research-projects', icon: FlaskConical, label: 'Research Projects', requiredDepartment: 'Research' },
   { to: '/admin', icon: Shield, label: 'Administration', minRole: Role.ADMIN },
 ];
 
@@ -496,9 +498,12 @@ export function Sidebar() {
     setTheme(theme === 'dark' ? 'light' : 'dark');
   };
 
-  const visibleMenuItems = menuItems.filter(
-    (item) => !item.minRole || (user && hasMinimumRole(user.role, item.minRole))
-  );
+  const visibleMenuItems = menuItems.filter((item) => {
+    const roleOk = !item.minRole || (user && hasMinimumRole(user.role, item.minRole));
+    const departmentOk =
+      !item.requiredDepartment || (user && user.department === item.requiredDepartment);
+    return roleOk && departmentOk;
+  });
 
   const sharedProps: SidebarProps = {
     visibleMenuItems,

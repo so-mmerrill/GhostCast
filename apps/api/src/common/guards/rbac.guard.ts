@@ -9,6 +9,7 @@ import { Role, hasPermission, isRoleAtLeast } from '@ghostcast/shared';
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
 import { ROLES_KEY } from '../decorators/roles.decorator';
 import { PERMISSIONS_KEY, Permission } from '../decorators/permissions.decorator';
+import { DEPARTMENTS_KEY } from '../decorators/departments.decorator';
 
 @Injectable()
 export class RbacGuard implements CanActivate {
@@ -67,6 +68,20 @@ export class RbacGuard implements CanActivate {
 
       if (!hasAllPermissions) {
         throw new ForbiddenException('Insufficient permissions');
+      }
+    }
+
+    // Check department-based access
+    const requiredDepartments = this.reflector.getAllAndOverride<string[]>(
+      DEPARTMENTS_KEY,
+      [context.getHandler(), context.getClass()]
+    );
+
+    if (requiredDepartments && requiredDepartments.length > 0) {
+      if (!user.department || !requiredDepartments.includes(user.department)) {
+        throw new ForbiddenException(
+          `Insufficient department access. Required: ${requiredDepartments.join(' or ')}`
+        );
       }
     }
 

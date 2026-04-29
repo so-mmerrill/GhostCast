@@ -53,6 +53,7 @@ export interface User extends BaseEntity {
   firstName: string;
   lastName: string;
   avatar?: string | null;
+  department?: string | null;
   role: Role;
   isActive: boolean;
   mustResetPassword: boolean;
@@ -68,6 +69,7 @@ export interface UserCreateInput {
   firstName: string;
   lastName: string;
   role?: Role;
+  department?: string;
   mustResetPassword?: boolean;
   preferences?: Record<string, unknown>;
 }
@@ -78,6 +80,7 @@ export interface UserUpdateInput {
   lastName?: string;
   avatar?: string | null;
   role?: Role;
+  department?: string | null;
   isActive?: boolean;
   mustResetPassword?: boolean;
   preferences?: Record<string, unknown>;

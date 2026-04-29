@@ -32,6 +32,12 @@ export const usersConfig: DataEntityConfig<User> = {
       },
     },
     {
+      key: 'department',
+      header: 'Department',
+      render: (item) => item.department ?? '—',
+      sortable: true,
+    },
+    {
       key: 'ssoProvider',
       header: 'Auth',
       render: (item) => (item.ssoProvider ? `SSO (${item.ssoProvider})` : 'Password'),
@@ -92,6 +98,15 @@ export const usersConfig: DataEntityConfig<User> = {
         { value: 'MANAGER', label: 'Manager' },
         { value: 'ADMIN', label: 'Admin' },
       ],
+    },
+    {
+      name: 'department',
+      label: 'Department',
+      type: 'select',
+      required: false,
+      optionsEndpoint: '/members/departments',
+      optionsQueryKey: 'members-departments',
+      placeholder: 'Select a department',
     },
     {
       name: 'password',
