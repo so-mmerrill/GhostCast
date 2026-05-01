@@ -1,3 +1,4 @@
+import { useCallback, useEffect, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { format, eachDayOfInterval } from 'date-fns';
 import { useUndoRedoStore, UndoableAction } from '@/stores/undo-redo-store';
@@ -222,12 +223,31 @@ export function RequestDetailModal({
 }: RequestDetailModalProps) {
   const queryClient = useQueryClient();
   const { pushUndo } = useUndoRedoStore();
+  const [descriptionExpanded, setDescriptionExpanded] = useState(false);
+  const [descriptionOverflows, setDescriptionOverflows] = useState(false);
+
+  // Callback ref: measures the description for overflow whenever it mounts
+  // (modal reopen, request switch, expand/collapse). More reliable than a
+  // layout effect when the element is rendered through a portal.
+  const measureDescription = useCallback(
+    (el: HTMLParagraphElement | null) => {
+      if (el && !descriptionExpanded) {
+        setDescriptionOverflows(el.scrollHeight > el.clientHeight + 1);
+      }
+    },
+    [descriptionExpanded]
+  );
 
   const { data: response, isLoading } = useQuery({
     queryKey: ['request', requestId],
     queryFn: () => api.get<{ data: RequestData }>(`/requests/${requestId}`),
     enabled: !!requestId && open,
   });
+
+  // Reset expansion when switching requests or closing the modal
+  useEffect(() => {
+    setDescriptionExpanded(false);
+  }, [requestId, open]);
 
   const removeAssignmentsMutation = useMutation({
     mutationFn: () => api.delete(`/requests/${requestId}/assignments`),
@@ -598,9 +618,26 @@ export function RequestDetailModal({
 
               {/* Description */}
               {isFieldVisible('description') && requestData.description && (
-                <p className="text-sm text-muted-foreground line-clamp-3">
-                  {requestData.description}
-                </p>
+                <div>
+                  <p
+                    ref={measureDescription}
+                    className={cn(
+                      'text-sm text-muted-foreground whitespace-pre-wrap',
+                      !descriptionExpanded && 'line-clamp-3'
+                    )}
+                  >
+                    {requestData.description}
+                  </p>
+                  {(descriptionOverflows || descriptionExpanded) && (
+                    <button
+                      type="button"
+                      onClick={() => setDescriptionExpanded((v) => !v)}
+                      className="mt-1 text-xs font-medium text-blue-600 hover:underline dark:text-blue-400"
+                    >
+                      {descriptionExpanded ? 'Less' : 'More...'}
+                    </button>
+                  )}
+                </div>
               )}
             </div>
 
