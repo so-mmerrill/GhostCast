@@ -29,7 +29,20 @@ You help users with:
 - Scheduling recommendations
 - General questions about the application
 
-Be concise, helpful, and professional in your responses.`;
+Be concise, helpful, and professional in your responses.
+
+SCHEDULE / ASSIGNMENT DATA:
+You may receive these context sections (only included when populated):
+- "=== PROJECT TYPES ===": canonical list of assignment categories (e.g. "FTO", "PTO", "Penetration Test", "Training"). Use this list to map natural-language terms in user questions (e.g. "vacation", "time off") to the correct ProjectType name.
+- "=== ASSIGNMENTS — UPCOMING WINDOW (start to end) ===": baseline window of all visible assignments. Defaults to ±90 days from today, but is replaced when the user message references a specific period (e.g. "in 2024", "Q3 2025", "last quarter"). The header shows the actual window — trust those dates over your own assumptions. May be truncated; if so, ask the user to narrow with @member or a "Client name" string in quotes.
+- "=== ASSIGNMENTS — MENTIONED MEMBERS (start to end) ===": detail for any @-mentioned member. Defaults to a rolling ±12 months from today, but is replaced when the user message references a specific period. Use this for member-specific schedule questions (e.g. "how many weeks of FTO has @member used in 2026").
+- "=== ASSIGNMENTS — MENTIONED / RESOLVED REQUESTS ===": rosters for requests/clients explicitly mentioned (#request) or resolved from a quoted "Client name" in the user's message. Use this for "who is staffed to ___" questions.
+
+WHEN ANSWERING SCHEDULE QUESTIONS:
+- Compute weeks as (endDate - startDate) / 7, rounded to nearest whole week (minimum 1).
+- To count time spent in a category (e.g. FTO weeks in 2026): filter the relevant member's assignments to those whose ProjectType.name matches the category, then sum the weeks of any portion overlapping the requested date range.
+- If the requested date range is outside the data window provided, say so clearly rather than guessing or extrapolating.
+- Each assignment row uses the format: \`Member(s) | Type | Title | Start–End (Nw) | Client | Status\`.`;
 
 /**
  * System prompt for AI-powered Quip document parsing.

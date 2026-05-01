@@ -5,6 +5,7 @@ import { ChatCompletionDto } from './dto/chat-completion.dto';
 import { Audit } from '../../common/decorators/audit.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { User } from '@ghostcast/database';
+import { Role } from '@ghostcast/shared';
 
 @Throttle({ short: {}, medium: {}, long: {} })
 @Controller('llm-chat')
@@ -24,6 +25,7 @@ export class LlmChatController {
       body.contextOverride,
       body.mentionedMemberIds,
       body.mentionedRequestIds,
+      user.role as Role,
     );
     return { data: { response } };
   }

@@ -5,6 +5,9 @@ import * as https from 'https';
 import { MembersService } from '../members/members.service';
 import { RequestsService } from '../requests/requests.service';
 import { UserSettingsService } from '../user-settings/user-settings.service';
+import { AssignmentsService } from '../assignments/assignments.service';
+import { ProjectTypesService } from '../project-types/project-types.service';
+import { PrismaService } from '../../database/prisma.service';
 import {
   buildLlmSystemPrompt,
   getContextFromPathname,
@@ -13,6 +16,7 @@ import {
   LLM_RESUME_PARSER_SYSTEM_PROMPT,
   ParsedResumeFields,
   QuipParsedRequestFields,
+  Role,
 } from '@ghostcast/shared';
 
 interface ChatMessage {
@@ -103,6 +107,9 @@ export class LlmChatService {
     private readonly userSettingsService: UserSettingsService,
     private readonly membersService: MembersService,
     private readonly requestsService: RequestsService,
+    private readonly assignmentsService: AssignmentsService,
+    private readonly projectTypesService: ProjectTypesService,
+    private readonly prisma: PrismaService,
   ) {}
 
   async chat(
@@ -112,6 +119,7 @@ export class LlmChatService {
     contextOverride?: LlmContextKey,
     mentionedMemberIds?: string[],
     mentionedRequestIds?: string[],
+    userRole?: Role,
   ): Promise<string> {
     // Get user-specific configuration for the AI Assistant plugin
     const config = await this.userSettingsService.getAllSettings(userId, 'openai-llm');
@@ -132,10 +140,37 @@ export class LlmChatService {
     // Always fetch all active members for context
     const allMembers = await this.fetchAllMembersWithDetails();
 
-    // Fetch mentioned requests if any
-    const mentionedRequests = mentionedRequestIds?.length
-      ? await this.fetchRequestsWithDetails(mentionedRequestIds)
+    // Inspect the latest user message to drive both quote-resolution and date-range extraction
+    const latestUserMessage = this.getLatestUserMessage(messages);
+    const detectedRange = latestUserMessage
+      ? this.extractDateRange(latestUserMessage.content, new Date())
+      : null;
+
+    // Resolve quoted client/project names from the latest user message into request IDs
+    const resolvedRequestIds = await this.resolveQuotedClientMatches(
+      latestUserMessage?.content ?? '',
+      mentionedRequestIds ?? [],
+    );
+
+    // Fetch mentioned + resolved requests
+    const mentionedRequests = resolvedRequestIds.length
+      ? await this.fetchRequestsWithDetails(resolvedRequestIds)
       : [];
+
+    // Skip baseline if the user named a specific member AND a date range — strictly less useful
+    // than the focused member-scoped fetch and avoids loading every member for that range.
+    const skipBaseline = !!detectedRange && (mentionedMemberIds?.length ?? 0) > 0;
+
+    // Fetch project types and assignment context (baseline + per-mention)
+    const [projectTypes, baselineAssignments, mentionedMemberAssignments, requestAssignments] =
+      await Promise.all([
+        this.fetchProjectTypes(),
+        skipBaseline
+          ? Promise.resolve(null)
+          : this.fetchBaselineAssignments(userRole, detectedRange),
+        this.fetchMemberScopedAssignments(mentionedMemberIds ?? [], userRole, detectedRange),
+        this.fetchRequestScopedAssignments(resolvedRequestIds),
+      ]);
 
     // Build request context with matching members
     const requestContext = this.buildRequestContext(mentionedRequests, allMembers);
@@ -147,8 +182,20 @@ export class LlmChatService {
       mentionedMemberIds,
     );
 
-    // Combine request and member context
-    const fullContext = requestContext + memberContext;
+    // Build new schedule-aware context sections
+    const projectTypeContext = this.buildProjectTypeContext(projectTypes);
+    const baselineAssignmentContext = this.buildBaselineAssignmentContext(baselineAssignments);
+    const memberAssignmentContext = this.buildMemberAssignmentContext(mentionedMemberAssignments);
+    const requestAssignmentContext = this.buildRequestAssignmentContext(requestAssignments);
+
+    // Combine all context. Order: project types, schedule windows, then existing member/request data.
+    const fullContext =
+      projectTypeContext +
+      baselineAssignmentContext +
+      memberAssignmentContext +
+      requestAssignmentContext +
+      requestContext +
+      memberContext;
 
     // Build system prompt with page context
     const systemPrompt = buildLlmSystemPrompt(
@@ -789,4 +836,518 @@ export class LlmChatService {
 
     return matches;
   }
+
+  // ===========================================
+  // Assignment / Schedule context
+  // ===========================================
+
+  private static readonly BASELINE_WINDOW_DAYS = 90;
+  private static readonly MEMBER_WINDOW_DAYS = 365;
+  private static readonly BASELINE_ROW_CAP = 300;
+  private static readonly QUOTED_MATCH_CAP_PER_QUOTE = 5;
+  private static readonly MIN_QUOTE_LENGTH = 2;
+
+  /**
+   * Find the most recent user-role message in the conversation.
+   */
+  private getLatestUserMessage(messages: ChatMessage[]): ChatMessage | null {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i]?.role === 'user') return messages[i] ?? null;
+    }
+    return null;
+  }
+
+  /**
+   * Extract `"quoted phrases"` from the given message and resolve them to request IDs by
+   * matching against `Request.clientName / projectName / title`. Returns the union of
+   * resolved IDs and the existing mention list (deduped).
+   */
+  private async resolveQuotedClientMatches(
+    messageContent: string,
+    existingRequestIds: string[],
+  ): Promise<string[]> {
+    const merged = new Set<string>(existingRequestIds);
+    if (!messageContent) return [...merged];
+
+    const quotedRegex = /"([^"]+)"/g;
+    const quotes = [...messageContent.matchAll(quotedRegex)]
+      .map(m => (m[1] ?? '').trim())
+      .filter(q => q.length >= LlmChatService.MIN_QUOTE_LENGTH);
+
+    if (quotes.length === 0) return [...merged];
+
+    const lookups = quotes.map(quote =>
+      this.prisma.request.findMany({
+        where: {
+          OR: [
+            { clientName: { contains: quote, mode: 'insensitive' as const } },
+            { projectName: { contains: quote, mode: 'insensitive' as const } },
+            { title: { contains: quote, mode: 'insensitive' as const } },
+          ],
+        },
+        select: { id: true },
+        take: LlmChatService.QUOTED_MATCH_CAP_PER_QUOTE,
+      }),
+    );
+
+    const results = await Promise.all(lookups);
+    for (const matches of results) {
+      for (const match of matches) merged.add(match.id);
+    }
+
+    return [...merged];
+  }
+
+  /**
+   * Fetch the canonical project-type list (active only) for the LLM to disambiguate
+   * natural-language references like "FTO" or "vacation".
+   */
+  private async fetchProjectTypes() {
+    return this.projectTypesService.findActive();
+  }
+
+  /**
+   * Baseline window of assignments (no member filter), role-aware. Defaults to ±90 days
+   * from now; an explicit `overrideRange` (typically extracted from the user's message)
+   * replaces it.
+   */
+  private async fetchBaselineAssignments(userRole?: Role, overrideRange?: DateRange | null) {
+    const range = overrideRange ?? this.computeWindow(LlmChatService.BASELINE_WINDOW_DAYS);
+    const result = await this.assignmentsService.getCalendarView(
+      {
+        startDate: range.startDate,
+        endDate: range.endDate,
+      },
+      userRole,
+    );
+    return { ...result, startDate: range.startDate, endDate: range.endDate, label: range.label };
+  }
+
+  /**
+   * Window of assignments scoped to the mentioned members, role-aware. Defaults to ±12
+   * months from now; an explicit `overrideRange` (typically extracted from the user's
+   * message) replaces it.
+   */
+  private async fetchMemberScopedAssignments(
+    memberIds: string[],
+    userRole?: Role,
+    overrideRange?: DateRange | null,
+  ) {
+    if (memberIds.length === 0) return null;
+    const range = overrideRange ?? this.computeWindow(LlmChatService.MEMBER_WINDOW_DAYS);
+    const result = await this.assignmentsService.getCalendarView(
+      {
+        startDate: range.startDate,
+        endDate: range.endDate,
+        memberIds,
+      },
+      userRole,
+    );
+    return { ...result, startDate: range.startDate, endDate: range.endDate, label: range.label };
+  }
+
+  /**
+   * All assignments linked to the given request IDs (mentioned + client-name-resolved).
+   */
+  private async fetchRequestScopedAssignments(requestIds: string[]) {
+    if (requestIds.length === 0) return [];
+
+    return this.prisma.assignment.findMany({
+      where: { requestId: { in: requestIds } },
+      include: {
+        projectType: true,
+        request: {
+          select: { id: true, title: true, clientName: true, projectName: true, status: true },
+        },
+        members: {
+          include: {
+            member: {
+              select: { id: true, firstName: true, lastName: true },
+            },
+          },
+        },
+      },
+      orderBy: { startDate: 'asc' },
+    });
+  }
+
+  /**
+   * Compute a [now - days, now + days] ISO date range string pair.
+   */
+  private computeWindow(days: number): DateRange {
+    const now = new Date();
+    const start = new Date(now);
+    start.setDate(start.getDate() - days);
+    const end = new Date(now);
+    end.setDate(end.getDate() + days);
+    return {
+      startDate: start.toISOString(),
+      endDate: end.toISOString(),
+    };
+  }
+
+  private static readonly MONTH_NAMES: ReadonlyArray<string> = [
+    'january', 'february', 'march', 'april', 'may', 'june',
+    'july', 'august', 'september', 'october', 'november', 'december',
+  ];
+
+  /**
+   * Parse the user message for date references and return a corresponding range.
+   * Supports (in order of precedence):
+   *  - explicit ranges:  "2024..2026", "from 2024 to 2026", "between 2024 and 2026"
+   *  - quarters:         "Q3 2024"
+   *  - YYYY-MM:          "2024-03"
+   *  - month names:      "March 2024" (year optional — defaults to current year)
+   *  - bare year:        "2024"
+   *  - relative:         "last|this|next|previous|prior|current year|quarter|month"
+   * Returns null if no recognizable reference is found.
+   */
+  private extractDateRange(content: string, now: Date): DateRange | null {
+    if (!content) return null;
+
+    // 1. Explicit year range — covers `2024..2026`, `from 2024 to 2026`, `between 2024 and 2026`,
+    //    `2024 - 2026`, `2024 through 2026`.
+    const rangeMatch =
+      /\bbetween\s+(20\d{2})\s+and\s+(20\d{2})\b/i.exec(content) ??
+      /\bfrom\s+(20\d{2})\s+to\s+(20\d{2})\b/i.exec(content) ??
+      /\b(20\d{2})\s*(?:\.\.|through|thru|–|—|-|to)\s*(20\d{2})\b/i.exec(content);
+    if (rangeMatch) {
+      const a = parseInt(rangeMatch[1] ?? '', 10);
+      const b = parseInt(rangeMatch[2] ?? '', 10);
+      if (Number.isFinite(a) && Number.isFinite(b)) {
+        const lo = Math.min(a, b);
+        const hi = Math.max(a, b);
+        return this.buildRange(
+          new Date(lo, 0, 1),
+          new Date(hi, 11, 31, 23, 59, 59, 999),
+          `${lo}–${hi}`,
+        );
+      }
+    }
+
+    // 2. Quarter: "Q3 2024"
+    const qMatch = /\bQ([1-4])\s+(20\d{2})\b/i.exec(content);
+    if (qMatch) {
+      const q = parseInt(qMatch[1] ?? '', 10);
+      const year = parseInt(qMatch[2] ?? '', 10);
+      if (Number.isFinite(q) && Number.isFinite(year)) {
+        const startMonth = (q - 1) * 3;
+        return this.buildRange(
+          new Date(year, startMonth, 1),
+          new Date(year, startMonth + 3, 0, 23, 59, 59, 999),
+          `Q${q} ${year}`,
+        );
+      }
+    }
+
+    // 3. YYYY-MM
+    const ymMatch = /\b(20\d{2})-(0[1-9]|1[0-2])\b/.exec(content);
+    if (ymMatch) {
+      const year = parseInt(ymMatch[1] ?? '', 10);
+      const month = parseInt(ymMatch[2] ?? '', 10);
+      if (Number.isFinite(year) && Number.isFinite(month)) {
+        return this.buildRange(
+          new Date(year, month - 1, 1),
+          new Date(year, month, 0, 23, 59, 59, 999),
+          `${ymMatch[1]}-${ymMatch[2]}`,
+        );
+      }
+    }
+
+    // 4. Month name (with optional 4-digit year)
+    const mnMatch = /\b(january|february|march|april|may|june|july|august|september|october|november|december)\b(?:\s+(20\d{2}))?/i.exec(content);
+    if (mnMatch) {
+      const monthIdx = LlmChatService.MONTH_NAMES.indexOf((mnMatch[1] ?? '').toLowerCase());
+      const year = mnMatch[2] ? parseInt(mnMatch[2], 10) : now.getFullYear();
+      if (monthIdx >= 0 && Number.isFinite(year)) {
+        const monthName = LlmChatService.MONTH_NAMES[monthIdx]!;
+        return this.buildRange(
+          new Date(year, monthIdx, 1),
+          new Date(year, monthIdx + 1, 0, 23, 59, 59, 999),
+          `${monthName.charAt(0).toUpperCase()}${monthName.slice(1)} ${year}`,
+        );
+      }
+    }
+
+    // 5. Bare 4-digit year
+    const yearMatch = /\b(20\d{2})\b/.exec(content);
+    if (yearMatch) {
+      const year = parseInt(yearMatch[1] ?? '', 10);
+      if (Number.isFinite(year)) {
+        return this.buildRange(
+          new Date(year, 0, 1),
+          new Date(year, 11, 31, 23, 59, 59, 999),
+          `${year}`,
+        );
+      }
+    }
+
+    // 6. Relative phrases: "last/previous/prior|this/current|next year|quarter|month"
+    const relMatch = /\b(last|previous|prior|this|current|next)\s+(year|quarter|month)\b/i.exec(content);
+    if (relMatch) {
+      return this.computeRelativeRange(
+        (relMatch[1] ?? '').toLowerCase(),
+        (relMatch[2] ?? '').toLowerCase(),
+        now,
+      );
+    }
+
+    return null;
+  }
+
+  private buildRange(start: Date, end: Date, label: string): DateRange {
+    return {
+      startDate: start.toISOString(),
+      endDate: end.toISOString(),
+      label,
+    };
+  }
+
+  private computeRelativeRange(
+    direction: string,
+    unit: string,
+    now: Date,
+  ): DateRange {
+    const offset = direction === 'last' || direction === 'previous' || direction === 'prior'
+      ? -1
+      : direction === 'next'
+        ? 1
+        : 0;
+
+    if (unit === 'year') {
+      const year = now.getFullYear() + offset;
+      return this.buildRange(
+        new Date(year, 0, 1),
+        new Date(year, 11, 31, 23, 59, 59, 999),
+        `${direction} year (${year})`,
+      );
+    }
+
+    if (unit === 'month') {
+      const target = new Date(now.getFullYear(), now.getMonth() + offset, 1);
+      return this.buildRange(
+        target,
+        new Date(target.getFullYear(), target.getMonth() + 1, 0, 23, 59, 59, 999),
+        `${direction} month`,
+      );
+    }
+
+    // unit === 'quarter'
+    const currentQuarter = Math.floor(now.getMonth() / 3);
+    const targetQuarterIndex = currentQuarter + offset;
+    const targetYear = now.getFullYear() + Math.floor(targetQuarterIndex / 4);
+    const targetQuarter = ((targetQuarterIndex % 4) + 4) % 4;
+    const startMonth = targetQuarter * 3;
+    return this.buildRange(
+      new Date(targetYear, startMonth, 1),
+      new Date(targetYear, startMonth + 3, 0, 23, 59, 59, 999),
+      `${direction} quarter (Q${targetQuarter + 1} ${targetYear})`,
+    );
+  }
+
+  /**
+   * Round a date span to whole weeks (minimum 1).
+   */
+  private formatWeeks(startDate: Date | string, endDate: Date | string): number {
+    const start = new Date(startDate).getTime();
+    const end = new Date(endDate).getTime();
+    const days = Math.max(0, (end - start) / 86_400_000);
+    return Math.max(1, Math.round(days / 7));
+  }
+
+  /** Format YYYY-MM-DD from a Date or ISO string. */
+  private toDate(value: Date | string): string {
+    return new Date(value).toISOString().slice(0, 10);
+  }
+
+  /**
+   * Build the project-type list context section.
+   */
+  private buildProjectTypeContext(
+    projectTypes: Array<{ id: string; name: string; abbreviation?: string | null; description?: string | null }>,
+  ): string {
+    if (projectTypes.length === 0) return '';
+    const lines = ['\n\n=== PROJECT TYPES ==='];
+    for (const pt of projectTypes) {
+      const abbr = pt.abbreviation ? ` [${pt.abbreviation}]` : '';
+      const desc = pt.description ? `: ${pt.description}` : '';
+      lines.push(`- ${pt.name}${abbr}${desc}`);
+    }
+    return lines.join('\n');
+  }
+
+  /**
+   * Build the rolling baseline assignment summary (capped).
+   */
+  private buildBaselineAssignmentContext(
+    data: { assignments: AssignmentRow[]; startDate: string; endDate: string; label?: string } | null,
+  ): string {
+    if (!data || data.assignments.length === 0) return '';
+
+    const start = this.toDate(data.startDate);
+    const end = this.toDate(data.endDate);
+    const labelSuffix = data.label ? ` — matched "${data.label}" from user message` : '';
+    const lines = [`\n\n=== ASSIGNMENTS — UPCOMING WINDOW (${start} to ${end}${labelSuffix}) ===`];
+    lines.push('Format: Member(s) | Type | Title | Start–End (weeks) | Client | Status');
+
+    const rows = data.assignments.slice(0, LlmChatService.BASELINE_ROW_CAP);
+    for (const a of rows) {
+      lines.push(this.formatAssignmentRow(a));
+    }
+
+    if (data.assignments.length > LlmChatService.BASELINE_ROW_CAP) {
+      const truncated = data.assignments.length - LlmChatService.BASELINE_ROW_CAP;
+      lines.push(`(+${truncated} more truncated — narrow your query with @member or a "Client" string for full detail)`);
+    }
+
+    return lines.join('\n');
+  }
+
+  /**
+   * Build the per-mentioned-member assignment context.
+   */
+  private buildMemberAssignmentContext(
+    data: { assignments: AssignmentRow[]; startDate: string; endDate: string; label?: string } | null,
+  ): string {
+    if (!data || data.assignments.length === 0) return '';
+
+    const start = this.toDate(data.startDate);
+    const end = this.toDate(data.endDate);
+    const labelSuffix = data.label ? ` — matched "${data.label}" from user message` : '';
+    const lines = [`\n\n=== ASSIGNMENTS — MENTIONED MEMBERS (${start} to ${end}${labelSuffix}) ===`];
+
+    const byMember = new Map<string, { name: string; rows: AssignmentRow[] }>();
+    for (const a of data.assignments) {
+      for (const am of a.members ?? []) {
+        if (!am.member) continue;
+        const key = am.member.id;
+        const name = `${am.member.firstName} ${am.member.lastName}`;
+        if (!byMember.has(key)) byMember.set(key, { name, rows: [] });
+        byMember.get(key)!.rows.push(a);
+      }
+    }
+
+    for (const { name, rows } of byMember.values()) {
+      lines.push(`\n--- ${name} ---`);
+      for (const a of rows) {
+        lines.push(this.formatAssignmentRow(a, { omitMember: true }));
+      }
+    }
+
+    return lines.join('\n');
+  }
+
+  /**
+   * Build the per-mentioned-request roster context (members staffed to client/request).
+   */
+  private buildRequestAssignmentContext(assignments: AssignmentRow[]): string {
+    if (assignments.length === 0) return '';
+
+    const byRequest = new Map<string, { request: RequestSummary; rows: AssignmentRow[] }>();
+    for (const a of assignments) {
+      if (!a.request) continue;
+      const key = a.request.id;
+      if (!byRequest.has(key)) byRequest.set(key, { request: a.request, rows: [] });
+      byRequest.get(key)!.rows.push(a);
+    }
+
+    if (byRequest.size === 0) return '';
+
+    const lines = ['\n\n=== ASSIGNMENTS — MENTIONED / RESOLVED REQUESTS ==='];
+    for (const { request, rows } of byRequest.values()) {
+      const clientLabel = request.clientName ? ` (${request.clientName})` : '';
+      lines.push(`\n--- Request: ${request.title}${clientLabel} ---`);
+
+      const memberSet = new Map<string, string>();
+      let minStart = Infinity;
+      let maxEnd = -Infinity;
+      const projectTypeSet = new Set<string>();
+
+      for (const a of rows) {
+        const start = new Date(a.startDate).getTime();
+        const end = new Date(a.endDate).getTime();
+        if (start < minStart) minStart = start;
+        if (end > maxEnd) maxEnd = end;
+        if (a.projectType?.name) projectTypeSet.add(a.projectType.name);
+        for (const am of a.members ?? []) {
+          if (am.member) {
+            memberSet.set(am.member.id, `${am.member.firstName} ${am.member.lastName}`);
+          }
+        }
+      }
+
+      const memberNames = [...memberSet.values()].join(', ') || '(none assigned yet)';
+      lines.push(`Members staffed: ${memberNames}`);
+      if (Number.isFinite(minStart) && Number.isFinite(maxEnd)) {
+        lines.push(`Date range: ${this.toDate(new Date(minStart))} to ${this.toDate(new Date(maxEnd))}`);
+      }
+      if (projectTypeSet.size > 0) {
+        lines.push(`Project Type(s): ${[...projectTypeSet].join(', ')}`);
+      }
+    }
+
+    return lines.join('\n');
+  }
+
+  /**
+   * Format a single assignment as a one-line row.
+   */
+  private formatAssignmentRow(a: AssignmentRow, opts: { omitMember?: boolean } = {}): string {
+    const memberPart = opts.omitMember
+      ? null
+      : (a.members ?? [])
+          .map(am => am.member ? `${am.member.firstName} ${am.member.lastName}` : null)
+          .filter((n): n is string => !!n)
+          .join(', ') || '(unassigned)';
+
+    const type = a.projectType?.name ?? '?';
+    const title = a.title ?? '';
+    const start = this.toDate(a.startDate);
+    const end = this.toDate(a.endDate);
+    const weeks = this.formatWeeks(a.startDate, a.endDate);
+    const client = a.request?.clientName ?? '-';
+    const status = a.displayStatus ?? '?';
+
+    const segments = [
+      memberPart,
+      type,
+      title,
+      `${start}–${end} (${weeks}w)`,
+      client,
+      status,
+    ].filter((s): s is string => s !== null);
+
+    return `- ${segments.join(' | ')}`;
+  }
+}
+
+interface AssignmentRow {
+  title: string;
+  startDate: Date | string;
+  endDate: Date | string;
+  displayStatus: string;
+  projectType?: { name: string } | null;
+  request?: RequestSummary | null;
+  members?: Array<{
+    member?: {
+      id: string;
+      firstName: string;
+      lastName: string;
+    } | null;
+  }> | null;
+}
+
+interface RequestSummary {
+  id: string;
+  title?: string;
+  clientName?: string | null;
+  projectName?: string | null;
+  status?: string;
+}
+
+interface DateRange {
+  startDate: string;
+  endDate: string;
+  /** Human-friendly label for the matched range (e.g. "2026", "Q3 2024", "last quarter (Q1 2026)"). */
+  label?: string;
 }
