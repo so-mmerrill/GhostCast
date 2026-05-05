@@ -602,6 +602,45 @@ export class LlmChatService {
   }
 
   /**
+   * Apply formatter prefix/suffix/bold decorations to a name. Returns the
+   * decorated string so the LLM sees role/assignment names the way they
+   * render in the UI.
+   */
+  private applyFormatters(
+    name: string,
+    decorators: FormatterDecorator[] | null | undefined,
+  ): string {
+    if (!decorators?.length) return name;
+    const prefix = decorators.map(d => d.formatter.prefix ?? '').join('');
+    const suffix = decorators.map(d => d.formatter.suffix ?? '').join('');
+    const bold = decorators.some(d => d.formatter.isBold);
+    const decorated = `${prefix}${name}${suffix}`;
+    return bold ? `**${decorated}**` : decorated;
+  }
+
+  /**
+   * Format an assignment's project roles as a comma-separated, decorated string.
+   */
+  private formatAssignmentProjectRoles(projectRoles: AssignmentRow['projectRoles']): string {
+    if (!projectRoles?.length) return '';
+    return projectRoles
+      .filter(r => r.projectRole?.name)
+      .map(r => this.applyFormatters(r.projectRole!.name, r.projectRole!.formatters))
+      .join(', ');
+  }
+
+  /**
+   * Format an assignment's own formatters as a comma-separated list of names.
+   */
+  private formatAssignmentFormatters(formatters: AssignmentRow['formatters']): string {
+    if (!formatters?.length) return '';
+    return formatters
+      .filter(f => f.formatter?.name)
+      .map(f => f.formatter.name)
+      .join(', ');
+  }
+
+  /**
    * Format skills with proficiency levels
    */
   private formatSkillsWithLevels(skills: MemberWithDetails['skills']): string {
@@ -966,6 +1005,14 @@ export class LlmChatService {
             },
           },
         },
+        formatters: { include: { formatter: true } },
+        projectRoles: {
+          include: {
+            projectRole: {
+              include: { formatters: { include: { formatter: true } } },
+            },
+          },
+        },
       },
       orderBy: { startDate: 'asc' },
     });
@@ -1188,7 +1235,7 @@ export class LlmChatService {
     const end = this.toDate(data.endDate);
     const labelSuffix = data.label ? ` — matched "${data.label}" from user message` : '';
     const lines = [`\n\n=== ASSIGNMENTS — UPCOMING WINDOW (${start} to ${end}${labelSuffix}) ===`];
-    lines.push('Format: Member(s) | Type | Title | Start–End (weeks) | Client | Status');
+    lines.push('Format: Member(s) | Type | Title | Start–End (weeks) | Client | Status | Roles | Formatters (last two omitted when empty)');
 
     const rows = data.assignments.slice(0, LlmChatService.BASELINE_ROW_CAP);
     for (const a of rows) {
@@ -1255,38 +1302,82 @@ export class LlmChatService {
 
     const lines = ['\n\n=== ASSIGNMENTS — MENTIONED / RESOLVED REQUESTS ==='];
     for (const { request, rows } of byRequest.values()) {
-      const clientLabel = request.clientName ? ` (${request.clientName})` : '';
-      lines.push(`\n--- Request: ${request.title}${clientLabel} ---`);
-
-      const memberSet = new Map<string, string>();
-      let minStart = Infinity;
-      let maxEnd = -Infinity;
-      const projectTypeSet = new Set<string>();
-
-      for (const a of rows) {
-        const start = new Date(a.startDate).getTime();
-        const end = new Date(a.endDate).getTime();
-        if (start < minStart) minStart = start;
-        if (end > maxEnd) maxEnd = end;
-        if (a.projectType?.name) projectTypeSet.add(a.projectType.name);
-        for (const am of a.members ?? []) {
-          if (am.member) {
-            memberSet.set(am.member.id, `${am.member.firstName} ${am.member.lastName}`);
-          }
-        }
-      }
-
-      const memberNames = [...memberSet.values()].join(', ') || '(none assigned yet)';
-      lines.push(`Members staffed: ${memberNames}`);
-      if (Number.isFinite(minStart) && Number.isFinite(maxEnd)) {
-        lines.push(`Date range: ${this.toDate(new Date(minStart))} to ${this.toDate(new Date(maxEnd))}`);
-      }
-      if (projectTypeSet.size > 0) {
-        lines.push(`Project Type(s): ${[...projectTypeSet].join(', ')}`);
-      }
+      lines.push(...this.buildRequestRosterLines(request, rows));
     }
 
     return lines.join('\n');
+  }
+
+  /**
+   * Aggregate one request's assignment rows into the lines emitted under its header.
+   */
+  private buildRequestRosterLines(request: RequestSummary, rows: AssignmentRow[]): string[] {
+    const clientLabel = request.clientName ? ` (${request.clientName})` : '';
+    const summary = this.summarizeAssignmentRows(rows);
+
+    const lines = [`\n--- Request: ${request.title}${clientLabel} ---`];
+    lines.push(`Members staffed: ${summary.memberNames || '(none assigned yet)'}`);
+    if (summary.dateRange) lines.push(`Date range: ${summary.dateRange}`);
+    if (summary.projectTypes) lines.push(`Project Type(s): ${summary.projectTypes}`);
+    if (summary.roles) lines.push(`Project Roles: ${summary.roles}`);
+    return lines;
+  }
+
+  /**
+   * Roll up rows into deduped, comma-joined member/role/project-type strings and a date range.
+   */
+  private summarizeAssignmentRows(rows: AssignmentRow[]): {
+    memberNames: string;
+    dateRange: string;
+    projectTypes: string;
+    roles: string;
+  } {
+    const memberSet = new Map<string, string>();
+    const roleSet = new Map<string, string>();
+    const projectTypeSet = new Set<string>();
+    let minStart = Infinity;
+    let maxEnd = -Infinity;
+
+    for (const a of rows) {
+      const start = new Date(a.startDate).getTime();
+      const end = new Date(a.endDate).getTime();
+      if (start < minStart) minStart = start;
+      if (end > maxEnd) maxEnd = end;
+      if (a.projectType?.name) projectTypeSet.add(a.projectType.name);
+      this.collectAssignmentMembers(a, memberSet);
+      this.collectAssignmentRoles(a, roleSet);
+    }
+
+    const dateRange =
+      Number.isFinite(minStart) && Number.isFinite(maxEnd)
+        ? `${this.toDate(new Date(minStart))} to ${this.toDate(new Date(maxEnd))}`
+        : '';
+
+    return {
+      memberNames: [...memberSet.values()].join(', '),
+      dateRange,
+      projectTypes: [...projectTypeSet].join(', '),
+      roles: [...roleSet.values()].join(', '),
+    };
+  }
+
+  private collectAssignmentMembers(a: AssignmentRow, into: Map<string, string>): void {
+    for (const am of a.members ?? []) {
+      if (am.member) {
+        into.set(am.member.id, `${am.member.firstName} ${am.member.lastName}`);
+      }
+    }
+  }
+
+  private collectAssignmentRoles(a: AssignmentRow, into: Map<string, string>): void {
+    for (const pr of a.projectRoles ?? []) {
+      if (pr.projectRole?.id && pr.projectRole.name) {
+        into.set(
+          pr.projectRole.id,
+          this.applyFormatters(pr.projectRole.name, pr.projectRole.formatters),
+        );
+      }
+    }
   }
 
   /**
@@ -1307,6 +1398,8 @@ export class LlmChatService {
     const weeks = this.formatWeeks(a.startDate, a.endDate);
     const client = a.request?.clientName ?? '-';
     const status = a.displayStatus ?? '?';
+    const roles = this.formatAssignmentProjectRoles(a.projectRoles);
+    const formatters = this.formatAssignmentFormatters(a.formatters);
 
     const segments = [
       memberPart,
@@ -1315,10 +1408,21 @@ export class LlmChatService {
       `${start}–${end} (${weeks}w)`,
       client,
       status,
-    ].filter((s): s is string => s !== null);
+      roles ? `Roles: ${roles}` : null,
+      formatters ? `Formatters: ${formatters}` : null,
+    ].filter((s): s is string => s !== null && s !== '');
 
     return `- ${segments.join(' | ')}`;
   }
+}
+
+interface FormatterDecorator {
+  formatter: {
+    name: string;
+    isBold: boolean;
+    prefix?: string | null;
+    suffix?: string | null;
+  };
 }
 
 interface AssignmentRow {
@@ -1335,6 +1439,14 @@ interface AssignmentRow {
       lastName: string;
     } | null;
   }> | null;
+  projectRoles?: Array<{
+    projectRole?: {
+      id: string;
+      name: string;
+      formatters?: FormatterDecorator[] | null;
+    } | null;
+  }> | null;
+  formatters?: FormatterDecorator[] | null;
 }
 
 interface RequestSummary {
