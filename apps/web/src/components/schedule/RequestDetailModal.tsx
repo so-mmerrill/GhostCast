@@ -526,6 +526,7 @@ export function RequestDetailModal({
               )}
             </div>
 
+            <div className="flex-1 overflow-y-auto flex flex-col">
             {/* Description Section */}
             <div className="py-4 border-b shrink-0 space-y-3">
               {/* Key Details Row */}
@@ -642,7 +643,7 @@ export function RequestDetailModal({
             </div>
 
             {/* Assigned Members Section */}
-            <div className="flex-1 overflow-y-auto py-4">
+            <div className="py-4">
               <div className="flex items-center justify-between mb-3">
                 <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
                   <Users className="h-4 w-4" />
@@ -725,6 +726,7 @@ export function RequestDetailModal({
               ) : (
                 <EmptyAssignmentsState />
               )}
+            </div>
             </div>
           </div>
         )}
